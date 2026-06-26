@@ -62,74 +62,25 @@ document.addEventListener("DOMContentLoaded", () => {
     { id: "ig3", username: "tech_trends", avatarColor: "#666", image: "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=400&q=80", caption: "The future of WebSockets and real-time communication.", likes: 234, liked: true, comments: [{ username: "dev_guy", text: "This is the way." }] }
   ];
 
-  let serverPort = null;
-
-  async function discoverServer() {
+  function getServerOrigin() {
     const loc = window.location;
-    let basePort = 3000;
-    if (loc.protocol !== "file:" && (loc.hostname === "localhost" || loc.hostname === "127.0.0.1")) {
-      const parts = loc.host.split(":");
-      if (parts.length > 1) basePort = parseInt(parts[1]) || 3000;
-    }
-    for (let port = basePort; port <= basePort + 10; port++) {
-      try {
-        const url = loc.protocol + "//localhost:" + port + "/api/health";
-        const r = await fetch(url, { signal: AbortSignal.timeout(500) });
-        if (r.ok) {
-          const data = await r.json();
-          if (data.name === "dangro") {
-            serverPort = port;
-            return loc.protocol + "//localhost:" + port;
-          }
-        }
-      } catch (e) {}
-    }
-    serverPort = basePort;
-    return loc.protocol + "//localhost:" + basePort;
+    return loc.protocol + "//" + loc.host;
+  }
+  function getWsOrigin() {
+    const loc = window.location;
+    const proto = loc.protocol === "https:" ? "wss:" : "ws:";
+    return proto + "//" + loc.host;
   }
 
-  let serverOrigin = null;
-  let wsOrigin = null;
-
-  async function ensureServerOrigin() {
-    if (!serverOrigin) {
-      serverOrigin = await discoverServer();
-      const loc = window.location;
-      const proto = loc.protocol === "https:" ? "wss:" : "ws:";
-      wsOrigin = proto + "//localhost:" + serverPort;
-    }
-    return serverOrigin;
-  }
-
-  async function apiPost(endpoint, body) {
-    const origin = await ensureServerOrigin();
-    const url = origin + "/api" + endpoint;
-    const r = await fetch(url, {
+  function apiPost(endpoint, body) {
+    return fetch(getServerOrigin() + "/api" + endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body)
-    });
-    if (!r.ok && r.headers.get("content-type")?.includes("text/html")) {
-      const text = await r.text();
-      throw new Error("Server returned " + r.status + " for " + url + ". Is the Dangro Node.js server running on port " + serverPort + "?");
-    }
-    const text = await r.text();
-    try {
-      return JSON.parse(text);
-    } catch (e) {
-      throw new Error("Server returned " + r.status + " " + r.statusText + " for " + url + ". Response: " + text.substring(0, 120));
-    }
+    }).then(r => r.json());
   }
-  async function apiGet(endpoint) {
-    const origin = await ensureServerOrigin();
-    const url = origin + "/api" + endpoint;
-    const r = await fetch(url);
-    const text = await r.text();
-    try {
-      return JSON.parse(text);
-    } catch (e) {
-      throw new Error("Server returned " + r.status + " " + r.statusText + " for " + url + ". Response: " + text.substring(0, 120));
-    }
+  function apiGet(endpoint) {
+    return fetch(getServerOrigin() + "/api" + endpoint).then(r => r.json());
   }
 
   function showToast(message, type) {
@@ -300,10 +251,9 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   /* ============ WEBSOCKET ============ */
-  async function connectWebSocket(tok) {
-    await ensureServerOrigin();
+  function connectWebSocket(tok) {
     try {
-      ws = new WebSocket(wsOrigin);
+      ws = new WebSocket(getWsOrigin());
     } catch (e) {
       showToast("Failed to connect: " + e.message, "error");
       return;
