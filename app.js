@@ -37,6 +37,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let activeFriendSubtab = "online";
   let activeNavTab = "servers";
   let friendSearchQuery = "";
+  let deniedUsers = new Map();
   let chatSearchQuery = "";
   let activeYtVideoId = "dQw4w9WgXcQ";
   let leftPanelWidth = 25;
@@ -77,10 +78,18 @@ document.addEventListener("DOMContentLoaded", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body)
-    }).then(r => r.json());
+    }).then(r => {
+      const ct = r.headers.get("content-type") || "";
+      if (ct.includes("application/json")) return r.json();
+      return r.text().then(text => { throw new Error("Server returned HTML instead of JSON. Server may be down. Response: " + text.substring(0, 80)); });
+    });
   }
   function apiGet(endpoint) {
-    return fetch(getServerOrigin() + "/api" + endpoint).then(r => r.json());
+    return fetch(getServerOrigin() + "/api" + endpoint).then(r => {
+      const ct = r.headers.get("content-type") || "";
+      if (ct.includes("application/json")) return r.json();
+      return r.text().then(text => { throw new Error("Server returned HTML instead of JSON. Response: " + text.substring(0, 80)); });
+    });
   }
 
   function showToast(message, type) {
@@ -345,6 +354,15 @@ document.addEventListener("DOMContentLoaded", () => {
       case "friend:request:sent":
         pendingRequests.outgoing.push(msg.to);
         showToast("Request sent to " + msg.to.username, "success");
+        renderPendingList();
+        break;
+
+      case "friend:request:denied":
+        pendingRequests.outgoing = pendingRequests.outgoing.filter(r => r.id !== msg.fromUserId);
+        deniedUsers.set(msg.fromUserId, true);
+        setTimeout(() => { deniedUsers.delete(msg.fromUserId); renderPendingList(); }, 5000);
+        showToast("Friend request was declined", "info");
+        renderPendingList();
         break;
 
       case "friend:accepted":
@@ -428,6 +446,19 @@ document.addEventListener("DOMContentLoaded", () => {
           if (msg.profile.id === currentUser.id) {
             Object.assign(currentUser, msg.profile);
           }
+          // Update in friends list
+          const fIdx = friends.findIndex(f => f.id === msg.profile.id);
+          if (fIdx !== -1) {
+            friends[fIdx].displayName = msg.profile.displayName;
+            friends[fIdx].profilePic = msg.profile.profilePic || "";
+          }
+          // Update in group members
+      groupChats.forEach(g => {
+        const m = g.members ? g.members.find(m => m.id === msg.profile.id) : null;
+        if (m) { m.displayName = msg.profile.displayName; m.profilePic = msg.profile.profilePic || ""; }
+      });
+          renderFriendsList();
+          renderChat();
         }
         break;
 
@@ -841,8 +872,18 @@ document.addEventListener("DOMContentLoaded", () => {
       item.className = "message-item" + (msg.system ? " system-msg" : "");
       item.setAttribute("data-msg-id", msg.id);
 
-      let avatarChar = msg.system ? "⚙️" : (isMe ? currentUser.displayName.charAt(0).toUpperCase() : msg.sender.charAt(0).toUpperCase());
+      let avatarChar = msg.system ? "" : (isMe ? currentUser.displayName.charAt(0).toUpperCase() : msg.sender.charAt(0).toUpperCase());
       let avatarColor = msg.system ? "transparent" : (isMe ? "#ffffff" : "#444444");
+      let avatarStyle = msg.system ? "background-color:transparent" : (isMe ? "background-color:#ffffff;color:#000" : "background-color:#444444");
+      let statusClass = "offline";
+      if (!msg.system) {
+        const senderInfo = findUserInfo(msg.senderId);
+        statusClass = (senderInfo && senderInfo.status) || (isMe ? currentUser.status : "offline");
+        if (senderInfo && senderInfo.profilePic) {
+          avatarStyle = "background-image:url(" + senderInfo.profilePic + ");background-size:cover;background-position:center;color:transparent";
+          avatarChar = "";
+        }
+      }
 
       let contentHTML = '<div class="msg-content">' + escapeHtml(msg.content) + '</div>';
       if (msg.isImage || /\.(jpeg|jpg|gif|png|webp)(\?.*)?$/i.test(msg.content) || msg.content.startsWith("https://images.unsplash.com/")) {
@@ -864,7 +905,8 @@ document.addEventListener("DOMContentLoaded", () => {
         reactionsHTML += '</div>';
       }
 
-      item.innerHTML = '<div class="msg-avatar" style="background-color:' + avatarColor + (isMe && !msg.system ? ';color:#000' : '') + '">' + avatarChar + '</div><div class="msg-body"><div class="msg-header"><span class="msg-sender">' + (msg.system ? 'System' : escapeHtml(msg.sender)) + '</span><span class="msg-time">' + (msg.timestamp || "") + '</span></div>' + replyHTML + contentHTML + reactionsHTML + '</div>';
+      const avatarHTML = '<div class="msg-avatar" style="' + avatarStyle + '">' + avatarChar + '</div><div class="status-dot ' + statusClass + '"></div>';
+      item.innerHTML = '<div class="msg-avatar-wrapper" style="position:relative;display:inline-block;flex-shrink:0;">' + avatarHTML + '</div><div class="msg-body"><div class="msg-header"><span class="msg-sender">' + (msg.system ? 'System' : escapeHtml(msg.sender)) + '</span><span class="msg-time">' + (msg.timestamp || "") + '</span></div>' + replyHTML + contentHTML + reactionsHTML + '</div>';
 
       if (!msg.system) {
         const actions = document.createElement("div");
@@ -874,6 +916,14 @@ document.addEventListener("DOMContentLoaded", () => {
         if (body) body.appendChild(actions);
         actions.querySelector(".btn-reply").addEventListener("click", () => startReply(msg));
         actions.querySelector(".btn-react").addEventListener("click", (e) => { e.stopPropagation(); openReactionPicker(msg.id); });
+      }
+
+      if (!msg.system) {
+        const senderEl = item.querySelector(".msg-sender");
+        if (senderEl && msg.senderId) {
+          senderEl.style.cursor = "pointer";
+          senderEl.addEventListener("click", (e) => { e.stopPropagation(); showUserProfile(msg.senderId); });
+        }
       }
 
       item.querySelectorAll(".msg-reaction").forEach(el => {
@@ -1108,13 +1158,23 @@ document.addEventListener("DOMContentLoaded", () => {
     if (ownerName) {
       const div = document.createElement("div");
       div.className = "server-member-item";
-      div.innerHTML = '<div class="friend-avatar" style="width:24px;height:24px;border-radius:50%;background:#555;display:flex;align-items:center;justify-content:center;font-size:0.6rem;color:#fff;flex-shrink:0;">' + ownerName.charAt(0).toUpperCase() + '</div><span>' + ownerName + ' (owner)</span><span style="margin-left:auto;font-size:0.6rem;color:var(--online-color);">●</span>';
+      div.setAttribute("data-user-id", server.owner_id || "");
+      const ownerOnline = onlineUserIds.has(server.owner_id);
+      const oStatus = ownerOnline ? "online" : "offline";
+      div.innerHTML = '<div style="position:relative;display:inline-block;flex-shrink:0;"><div class="friend-avatar" style="width:24px;height:24px;border-radius:50%;background:#555;display:flex;align-items:center;justify-content:center;font-size:0.6rem;color:#fff;flex-shrink:0;">' + ownerName.charAt(0).toUpperCase() + '</div><div class="status-dot ' + oStatus + '"></div></div><span class="member-name">' + ownerName + ' (owner)</span>';
+      const ownerId = server.owner_id;
+      div.querySelector(".friend-avatar").addEventListener("click", (e) => { e.stopPropagation(); if (ownerId) showUserProfile(ownerId); });
+      div.querySelector(".member-name").addEventListener("click", (e) => { e.stopPropagation(); if (ownerId) showUserProfile(ownerId); });
       container.appendChild(div);
     }
     if (currentUser && currentUser.displayName !== ownerName) {
       const div = document.createElement("div");
       div.className = "server-member-item";
-      div.innerHTML = '<div class="friend-avatar" style="width:24px;height:24px;border-radius:50%;background:#555;display:flex;align-items:center;justify-content:center;font-size:0.6rem;color:#fff;flex-shrink:0;">' + currentUser.displayName.charAt(0).toUpperCase() + '</div><span>' + currentUser.displayName + '</span><span style="margin-left:auto;font-size:0.6rem;color:var(--online-color);">●</span>';
+      div.setAttribute("data-user-id", currentUser.id);
+      const cStatus = currentUser.status || "online";
+      div.innerHTML = '<div style="position:relative;display:inline-block;flex-shrink:0;"><div class="friend-avatar" style="width:24px;height:24px;border-radius:50%;background:#555;display:flex;align-items:center;justify-content:center;font-size:0.6rem;color:#fff;flex-shrink:0;">' + currentUser.displayName.charAt(0).toUpperCase() + '</div><div class="status-dot ' + cStatus + '"></div></div><span class="member-name">' + currentUser.displayName + '</span>';
+      div.querySelector(".friend-avatar").addEventListener("click", (e) => { e.stopPropagation(); showUserProfile(currentUser.id); });
+      div.querySelector(".member-name").addEventListener("click", (e) => { e.stopPropagation(); showUserProfile(currentUser.id); });
       container.appendChild(div);
     }
   }
@@ -1190,12 +1250,16 @@ document.addEventListener("DOMContentLoaded", () => {
     container.innerHTML = '<div style="font-size:0.7rem;font-weight:600;color:var(--text-muted);padding:4px 8px;text-transform:uppercase;letter-spacing:0.3px;">Members - ' + (group.members ? group.members.length : 0) + '</div>';
     if (group.members) {
       group.members.forEach(m => {
-        const isOnline = m.status === "online" || onlineUserIds.has(m.id);
+        const mStatus = m.status && onlineUserIds.has(m.id) ? m.status : (onlineUserIds.has(m.id) ? "online" : "offline");
         const div = document.createElement("div");
         div.className = "group-member-item";
         const name = m.displayName || m.username || "Unknown";
         const initial = name.charAt(0).toUpperCase();
-        div.innerHTML = '<div class="friend-avatar" style="width:24px;height:24px;border-radius:50%;background:#555;display:flex;align-items:center;justify-content:center;font-size:0.6rem;color:#fff;flex-shrink:0;">' + initial + '</div><span>' + name + (m.id === currentUser.id ? " (you)" : "") + '</span><span style="margin-left:auto;font-size:0.6rem;color:' + (isOnline ? '#aaa' : '#444') + '">' + (isOnline ? "●" : "○") + '</span>';
+        const hasPic = m.profilePic || m.profile_pic;
+        const gAvatarStyle = hasPic ? 'background-image:url(' + (m.profilePic || m.profile_pic) + ');background-size:cover;background-position:center;color:transparent' : 'background:#555';
+        div.innerHTML = '<div style="position:relative;display:inline-block;flex-shrink:0;"><div class="friend-avatar" style="width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:0.6rem;color:#fff;flex-shrink:0;' + gAvatarStyle + '">' + (hasPic ? '' : initial) + '</div><div class="status-dot ' + mStatus + '"></div></div><span class="member-name">' + name + (m.id === currentUser.id ? " (you)" : "") + '</span>';
+        div.querySelector(".friend-avatar").addEventListener("click", (e) => { e.stopPropagation(); if (m.id !== currentUser.id) showUserProfile(m.id); });
+        div.querySelector(".member-name").addEventListener("click", (e) => { e.stopPropagation(); if (m.id !== currentUser.id) showUserProfile(m.id); });
         container.appendChild(div);
       });
     }
@@ -1262,8 +1326,15 @@ document.addEventListener("DOMContentLoaded", () => {
       const displayName = friend.displayName || friend.username;
       const discriminator = friend.discriminator || friend.id.substring(0, 4);
       const customStatus = friend.customStatus || "";
-      item.innerHTML = '<div class="friend-info-left"><div class="friend-avatar-wrapper"><div class="friend-avatar" style="background-color:' + (friend.avatarColor || "#555") + '">' + displayName.charAt(0).toUpperCase() + '</div><div class="status-indicator ' + status + '"></div></div><div class="friend-details"><div class="friend-username-row"><span class="friend-name">' + displayName + '</span><span class="friend-tag">#' + discriminator + '</span></div><div class="friend-custom-status">' + (customStatus || status) + '</div></div></div><div class="friend-actions"><button class="friend-action-btn btn-quick-dm" title="Message">💬</button><button class="friend-action-btn btn-remove-friend decline" title="Remove">✖</button></div>';
+      const avatarInitial = displayName.charAt(0).toUpperCase();
+      let friendAvatarStyle = 'background-color:' + (friend.avatarColor || "#555");
+      if (friend.profilePic) {
+        friendAvatarStyle = 'background-image:url(' + friend.profilePic + ');background-size:cover;background-position:center;color:transparent';
+      }
+      item.innerHTML = '<div class="friend-info-left"><div class="friend-avatar-wrapper"><div class="friend-avatar" style="' + friendAvatarStyle + '">' + (friend.profilePic ? '' : avatarInitial) + '</div><div class="status-indicator ' + status + '"></div></div><div class="friend-details"><div class="friend-username-row"><span class="friend-name">' + displayName + '</span><span class="friend-tag">#' + discriminator + '</span></div><div class="friend-custom-status">' + (customStatus || status) + '</div></div></div><div class="friend-actions"><button class="friend-action-btn btn-quick-dm" title="Message">💬</button><button class="friend-action-btn btn-remove-friend decline" title="Remove">✖</button></div>';
 
+      item.querySelector(".friend-name").addEventListener("click", (e) => { e.stopPropagation(); showUserProfile(friend.id); });
+      item.querySelector(".friend-avatar").addEventListener("click", (e) => { e.stopPropagation(); showUserProfile(friend.id); });
       item.addEventListener("click", (e) => { if (!e.target.closest(".friend-action-btn")) openDirectMessage(friend.id); });
       item.querySelector(".btn-quick-dm").addEventListener("click", () => openDirectMessage(friend.id));
       item.querySelector(".btn-remove-friend").addEventListener("click", () => {
@@ -1306,14 +1377,21 @@ document.addEventListener("DOMContentLoaded", () => {
       const item = document.createElement("div");
       item.className = "friend-item";
       const displayName = req.displayName || req.username;
-      item.innerHTML = '<div class="friend-info-left"><div class="friend-avatar-wrapper"><div class="friend-avatar" style="background-color:#555">' + displayName.charAt(0).toUpperCase() + '</div><div class="status-indicator offline"></div></div><div class="friend-details"><div class="friend-username-row"><span class="friend-name">' + displayName + '</span></div><div><span class="pending-badge">Incoming Request</span></div></div></div><div class="friend-actions"><button class="friend-action-btn btn-accept-req" title="Accept">✔</button><button class="friend-action-btn btn-cancel-req decline" title="Decline">✖</button></div>';
+      const reqInitial = displayName.charAt(0).toUpperCase();
+      let reqAvatarStyle = 'background-color:#555';
+      if (req.profilePic) {
+        reqAvatarStyle = 'background-image:url(' + req.profilePic + ');background-size:cover;background-position:center;color:transparent';
+      }
+      item.innerHTML = '<div class="friend-info-left"><div class="friend-avatar-wrapper"><div class="friend-avatar" style="' + reqAvatarStyle + '">' + (req.profilePic ? '' : reqInitial) + '</div><div class="status-indicator offline"></div></div><div class="friend-details"><div class="friend-username-row"><span class="friend-name">' + displayName + '</span></div><div><span class="pending-badge">Incoming Request</span></div></div></div><div class="friend-actions"><button class="friend-action-btn btn-accept-req" title="Accept">✔</button><button class="friend-action-btn btn-cancel-req decline" title="Decline">✖</button></div>';
+      item.querySelector(".friend-name").addEventListener("click", (e) => { e.stopPropagation(); showUserProfile(req.id); });
+      item.querySelector(".friend-avatar").addEventListener("click", (e) => { e.stopPropagation(); showUserProfile(req.id); });
       item.querySelector(".btn-accept-req").addEventListener("click", () => {
         wsSend({ type: "friend:accept", friendId: req.id });
         pendingRequests.incoming = pendingRequests.incoming.filter(r => r.id !== req.id);
         renderPendingList();
       });
       item.querySelector(".btn-cancel-req").addEventListener("click", () => {
-        wsSend({ type: "friend:remove", friendId: req.id });
+        wsSend({ type: "friend:deny", friendId: req.id });
         pendingRequests.incoming = pendingRequests.incoming.filter(r => r.id !== req.id);
         renderPendingList();
       });
@@ -1323,7 +1401,14 @@ document.addEventListener("DOMContentLoaded", () => {
       const item = document.createElement("div");
       item.className = "friend-item";
       const displayName = req.displayName || req.username;
-      item.innerHTML = '<div class="friend-info-left"><div class="friend-avatar-wrapper"><div class="friend-avatar" style="background-color:#555">' + displayName.charAt(0).toUpperCase() + '</div><div class="status-indicator offline"></div></div><div class="friend-details"><div class="friend-username-row"><span class="friend-name">' + displayName + '</span></div><div><span class="pending-badge">Outgoing Request</span></div></div></div><div class="friend-actions"><button class="friend-action-btn btn-cancel-req decline" title="Cancel">✖</button></div>';
+      const outInitial = displayName.charAt(0).toUpperCase();
+      let outAvatarStyle = 'background-color:#555';
+      if (req.profilePic) {
+        outAvatarStyle = 'background-image:url(' + req.profilePic + ');background-size:cover;background-position:center;color:transparent';
+      }
+      item.innerHTML = '<div class="friend-info-left"><div class="friend-avatar-wrapper"><div class="friend-avatar" style="' + outAvatarStyle + '">' + (req.profilePic ? '' : outInitial) + '</div><div class="status-indicator offline"></div></div><div class="friend-details"><div class="friend-username-row"><span class="friend-name">' + displayName + '</span></div><div><span class="pending-badge">Outgoing Request</span></div></div></div><div class="friend-actions"><button class="friend-action-btn btn-cancel-req decline" title="Cancel">✖</button></div>';
+      item.querySelector(".friend-name").addEventListener("click", (e) => { e.stopPropagation(); showUserProfile(req.id); });
+      item.querySelector(".friend-avatar").addEventListener("click", (e) => { e.stopPropagation(); showUserProfile(req.id); });
       item.querySelector(".btn-cancel-req").addEventListener("click", () => {
         wsSend({ type: "friend:remove", friendId: req.id });
         pendingRequests.outgoing = pendingRequests.outgoing.filter(r => r.id !== req.id);
@@ -1337,7 +1422,10 @@ document.addEventListener("DOMContentLoaded", () => {
   function initSettings() {
     document.getElementById("btn-settings").addEventListener("click", () => {
       document.getElementById("settings-panel").classList.remove("hidden");
+      document.getElementById("settings-username").value = "@" + (currentUser.username || "");
       document.getElementById("settings-display-name").value = currentUser.displayName || "";
+      const sd = document.getElementById("settings-statusdot");
+      if (sd) sd.className = "status-dot " + (currentUser.status || "online");
       document.getElementById("settings-bio").value = currentUser.bio || "";
       document.getElementById("settings-status").value = currentUser.status || "online";
       document.getElementById("settings-custom-status").value = currentUser.customStatus || "";
@@ -1397,6 +1485,192 @@ document.addEventListener("DOMContentLoaded", () => {
       document.documentElement.setAttribute("data-theme", this.value);
     });
   }
+
+  /* ============ USER PROFILE MODAL ============ */
+  function initProfileModal() {
+    document.getElementById("btn-profile-close").addEventListener("click", () => {
+      document.getElementById("user-profile-modal").classList.add("hidden");
+    });
+    document.getElementById("user-profile-modal").addEventListener("click", (e) => {
+      if (e.target === e.currentTarget) document.getElementById("user-profile-modal").classList.add("hidden");
+    });
+    document.getElementById("btn-profile-friend").addEventListener("click", () => {
+      const userId = document.getElementById("btn-profile-friend").getAttribute("data-user-id");
+      if (!userId) return;
+      const btn = document.getElementById("btn-profile-friend");
+      if (deniedUsers.has(userId)) {
+        showToast("Please wait before sending another request", "error");
+        return;
+      }
+      const isFriend = friends.some(f => f.id === userId);
+      const isPending = pendingRequests.incoming.some(r => r.id === userId) || pendingRequests.outgoing.some(r => r.id === userId);
+      if (isFriend || isPending) {
+        showToast(isFriend ? "Already friends" : "Request already pending", "info");
+        return;
+      }
+      wsSend({ type: "friend:request", username: document.getElementById("btn-profile-friend").getAttribute("data-username") });
+      btn.textContent = "Request Sent";
+      btn.classList.add("pending");
+      btn.disabled = true;
+      showToast("Friend request sent!", "success");
+    });
+    document.getElementById("btn-profile-message").addEventListener("click", () => {
+      const userId = document.getElementById("btn-profile-message").getAttribute("data-user-id");
+      if (!userId) return;
+      const isFriend = friends.some(f => f.id === userId);
+      if (isFriend) {
+        openDirectMessage(userId);
+        document.getElementById("user-profile-modal").classList.add("hidden");
+      } else {
+        showToast("Add them as a friend first", "error");
+      }
+    });
+    document.getElementById("btn-profile-call").addEventListener("click", () => {
+      const userId = document.getElementById("btn-profile-call").getAttribute("data-user-id");
+      if (!userId) return;
+      const isFriend = friends.some(f => f.id === userId);
+      if (isFriend) {
+        document.getElementById("user-profile-modal").classList.add("hidden");
+        openDirectMessage(userId);
+        setTimeout(() => startCall(userId), 300);
+      } else {
+        showToast("Add them as a friend first", "error");
+      }
+    });
+  }
+
+  function populateProfileModal(profileData, userId) {
+    const avatar = document.getElementById("profile-modal-avatar");
+    const name = document.getElementById("profile-modal-name");
+    const usernameEl = document.getElementById("profile-modal-username");
+    const statusEl = document.getElementById("profile-modal-status");
+    const bioEl = document.getElementById("profile-modal-bio");
+    const friendBtn = document.getElementById("btn-profile-friend");
+    const msgBtn = document.getElementById("btn-profile-message");
+    const callBtn = document.getElementById("btn-profile-call");
+
+    const displayName = profileData.displayName || profileData.display_name || profileData.username || "Unknown";
+    const uname = profileData.username || "";
+    const bioText = profileData.bio || "No bio set.";
+    const userStatus = profileData.status || "offline";
+    const profilePic = profileData.profilePic || profileData.profile_pic || "";
+
+    const sd = document.getElementById("profile-modal-statusdot");
+    if (sd) { sd.className = "status-dot " + userStatus; }
+
+    if (profilePic) {
+      avatar.style.backgroundImage = "url(" + profilePic + ")";
+      avatar.style.backgroundSize = "cover";
+      avatar.textContent = "";
+    } else {
+      avatar.style.backgroundImage = "";
+      avatar.textContent = displayName.charAt(0).toUpperCase();
+    }
+    name.textContent = displayName;
+    usernameEl.textContent = "@" + uname;
+    statusEl.textContent = userStatus.charAt(0).toUpperCase() + userStatus.slice(1);
+    bioEl.textContent = bioText;
+
+    friendBtn.setAttribute("data-user-id", userId);
+    friendBtn.setAttribute("data-username", uname);
+    msgBtn.setAttribute("data-user-id", userId);
+    callBtn.setAttribute("data-user-id", userId);
+
+    const isSelf = userId === currentUser.id;
+    const isFriend = friends.some(f => f.id === userId);
+    const isPendingOut = pendingRequests.outgoing.some(r => r.id === userId);
+    const isPendingIn = pendingRequests.incoming.some(r => r.id === userId);
+    const isDenied = deniedUsers.has(userId);
+
+    friendBtn.onclick = null;
+
+    if (isSelf) {
+      friendBtn.style.display = "none";
+      msgBtn.style.display = "none";
+      callBtn.style.display = "none";
+    } else {
+      friendBtn.style.display = "";
+      msgBtn.style.display = "";
+      callBtn.style.display = "";
+      if (isFriend) {
+        friendBtn.textContent = "Friends";
+        friendBtn.className = "profile-action-btn added";
+        friendBtn.disabled = true;
+      } else if (isPendingIn) {
+        friendBtn.textContent = "Accept Request";
+        friendBtn.className = "profile-action-btn added";
+        friendBtn.disabled = false;
+        friendBtn.onclick = () => {
+          wsSend({ type: "friend:accept", friendId: userId });
+          pendingRequests.incoming = pendingRequests.incoming.filter(r => r.id !== userId);
+          showToast("Friend request accepted!", "success");
+          document.getElementById("user-profile-modal").classList.add("hidden");
+          renderPendingList();
+          renderFriendsList();
+        };
+      } else if (isPendingOut) {
+        friendBtn.textContent = "Request Sent";
+        friendBtn.className = "profile-action-btn pending";
+        friendBtn.disabled = true;
+      } else if (isDenied) {
+        friendBtn.textContent = "Cooldown";
+        friendBtn.className = "profile-action-btn cooldown";
+        friendBtn.disabled = true;
+      } else {
+        friendBtn.textContent = "Add Friend";
+        friendBtn.className = "profile-action-btn";
+        friendBtn.disabled = false;
+        friendBtn.onclick = () => {
+          wsSend({ type: "friend:request", username: uname });
+          friendBtn.textContent = "Request Sent";
+          friendBtn.className = "profile-action-btn pending";
+          friendBtn.disabled = true;
+          showToast("Friend request sent!", "success");
+        };
+      }
+    }
+
+    document.getElementById("user-profile-modal").classList.remove("hidden");
+  }
+
+  function findUserInfo(userId) {
+    if (userId === currentUser.id) return currentUser;
+    const friend = friends.find(f => f.id === userId);
+    if (friend) return { ...friend, status: onlineUserIds.has(friend.id) ? friend.status || "online" : "offline" };
+    const allUser = (typeof allUsers !== "undefined" ? allUsers : []).find(u => u.id === userId);
+    if (allUser) return { ...allUser, status: onlineUserIds.has(allUser.id) ? allUser.status || "online" : "offline" };
+    const groupMember = groupChats.reduce((found, g) => {
+      if (found) return found;
+      return g.members ? g.members.find(m => m.id === userId) : null;
+    }, null);
+    if (groupMember) return { ...groupMember, status: onlineUserIds.has(groupMember.id) ? groupMember.status || "online" : "offline" };
+    return null;
+  }
+
+  function showUserProfile(userId) {
+    if (userId === currentUser.id) {
+      populateProfileModal(currentUser, userId);
+      return;
+    }
+    const friend = friends.find(f => f.id === userId);
+    if (friend) { populateProfileModal(friend, userId); return; }
+    const allUser = (typeof allUsers !== "undefined" ? allUsers : []).find(u => u.id === userId);
+    if (allUser) { populateProfileModal(allUser, userId); return; }
+    const groupMember = groupChats.reduce((found, g) => {
+      if (found) return found;
+      return g.members ? g.members.find(m => m.id === userId) : null;
+    }, null);
+    if (groupMember) { populateProfileModal(groupMember, userId); return; }
+    apiGet("/users/" + userId).then(data => {
+      if (data && data.user) {
+        populateProfileModal(data.user, userId);
+      } else {
+        showToast("Could not find user", "error");
+      }
+    }).catch(() => showToast("Could not find user", "error"));
+  }
+
+  initProfileModal();
 
   /* ============ LOGOUT ============ */
   document.getElementById("btn-logout").addEventListener("click", () => {

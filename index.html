@@ -350,9 +350,16 @@
         <div class="settings-section">
           <h3>Profile</h3>
           <div class="settings-profile-pic">
-            <div id="settings-avatar" class="settings-avatar">U</div>
+            <div style="position:relative;display:inline-block;">
+              <div id="settings-avatar" class="settings-avatar">U</div>
+              <div class="status-dot online" id="settings-statusdot"></div>
+            </div>
             <button id="btn-upload-pic" class="settings-btn">Upload Photo</button>
             <input type="file" id="file-upload-input" accept="image/*" class="hidden">
+          </div>
+          <div class="settings-field">
+            <label>Username</label>
+            <input type="text" id="settings-username" class="settings-input" readonly style="opacity:0.7;cursor:not-allowed;">
           </div>
           <div class="settings-field">
             <label>Display Name</label>
@@ -438,6 +445,28 @@
       <div class="call-notif-actions">
         <button id="btn-answer-call" class="call-notif-btn answer">Answer</button>
         <button id="btn-decline-call" class="call-notif-btn decline">Decline</button>
+      </div>
+    </div>
+
+    <!-- USER PROFILE MODAL -->
+    <div id="user-profile-modal" class="modal hidden">
+      <div class="modal-content profile-modal-content">
+        <button id="btn-profile-close" class="settings-close profile-close-btn">✕</button>
+        <div class="profile-modal-body">
+          <div style="position:relative;display:inline-block;">
+            <div class="profile-modal-avatar" id="profile-modal-avatar">U</div>
+            <div class="status-dot online" id="profile-modal-statusdot"></div>
+          </div>
+          <h2 id="profile-modal-name">User Name</h2>
+          <span class="profile-modal-username" id="profile-modal-username">@username</span>
+          <div class="profile-modal-status" id="profile-modal-status">Online</div>
+          <div class="profile-modal-bio" id="profile-modal-bio">No bio set.</div>
+          <div class="profile-modal-actions" id="profile-modal-actions">
+            <button id="btn-profile-friend" class="profile-action-btn">Add Friend</button>
+            <button id="btn-profile-message" class="profile-action-btn">Message</button>
+            <button id="btn-profile-call" class="profile-action-btn">Call</button>
+          </div>
+        </div>
       </div>
     </div>
 

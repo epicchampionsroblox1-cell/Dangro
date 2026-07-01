@@ -151,6 +151,14 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', port: server.address().port, name: 'dangro' });
 });
 
+// Get user profile by ID (public info)
+app.get('/api/users/:id', (req, res) => {
+  const db = getDB();
+  const user = db.prepare('SELECT id, username, display_name, bio, status, profile_pic FROM users WHERE id = ?').get(req.params.id);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  res.json({ user: { id: user.id, username: user.username, displayName: user.display_name, bio: user.bio || '', status: user.status || 'offline', profilePic: user.profile_pic || '' } });
+});
+
 // Browse public servers
 app.get('/api/servers/browse', (req, res) => {
   const db = getDB();
@@ -422,7 +430,7 @@ function handleMessage(ws, msg) {
       if (!username) return;
 
       const db = getDB();
-      const target = db.prepare('SELECT id, username, display_name FROM users WHERE username = ?').get(username);
+      const target = db.prepare('SELECT id, username, display_name FROM users WHERE LOWER(username) = LOWER(?)').get(username.trim());
       if (!target) return ws.send(JSON.stringify({ type: 'error', message: 'User not found' }));
       if (target.id === ws.userId) return ws.send(JSON.stringify({ type: 'error', message: 'Cannot add yourself' }));
 
@@ -478,6 +486,20 @@ function handleMessage(ws, msg) {
         customStatus: user ? user.custom_status || '' : '', avatarColor: '#555', profilePic: user ? user.profile_pic || '' : ''
       };
       broadcastToUser(friendId, { type: 'friend:accepted', friend: userData });
+      break;
+    }
+
+    case 'friend:deny': {
+      if (!ws.userId) return;
+      const { friendId } = msg;
+      if (!friendId) return;
+
+      const db = getDB();
+      db.prepare('DELETE FROM friends WHERE (user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?)').run(friendId, ws.userId, ws.userId, friendId);
+
+      ws.send(JSON.stringify({ type: 'friend:denied', friendId }));
+      // Notify requester that they were denied — includes timestamp for 5s cooldown
+      broadcastToUser(friendId, { type: 'friend:request:denied', fromUserId: ws.userId, denyTimestamp: Date.now() });
       break;
     }
 
@@ -611,7 +633,18 @@ function handleMessage(ws, msg) {
       const user = db.prepare('SELECT * FROM users WHERE id = ?').get(ws.userId);
       if (user) onlineUsers.set(ws.userId, user);
 
-      ws.send(JSON.stringify({ type: 'profile:updated', profile: { id: ws.userId, displayName: user ? user.display_name : displayName, bio: user ? user.bio : bio, status: user ? user.status : status, customStatus: user ? user.custom_status : customStatus, profilePic: user ? user.profile_pic : profilePic, theme: user ? user.theme : theme } }));
+      const profileData = { id: ws.userId, displayName: user ? user.display_name : displayName, bio: user ? user.bio : bio, status: user ? user.status : status, customStatus: user ? user.custom_status : customStatus, profilePic: user ? user.profile_pic : profilePic, theme: user ? user.theme : theme, username: user ? user.username : '' };
+      ws.send(JSON.stringify({ type: 'profile:updated', profile: profileData }));
+
+      // Broadcast profile update to all friends of this user
+      const friends = db.prepare(`
+        SELECT user_id FROM friends WHERE friend_id = ? AND status = 'accepted'
+        UNION
+        SELECT friend_id FROM friends WHERE user_id = ? AND status = 'accepted'
+      `).all(ws.userId, ws.userId);
+      friends.forEach(f => {
+        broadcastToUser(f.user_id, { type: 'profile:updated', profile: profileData });
+      });
       break;
     }
 
@@ -693,5 +726,18 @@ function tryPort(port) {
       console.log(`Open http://localhost:${addr.port} in your browser`);
     });
 }
+
+// API 404 catch-all — unknown API routes return JSON
+app.use('/api', (req, res) => {
+  res.status(404).json({ error: 'API endpoint not found' });
+});
+
+// Global error handler — ensures API errors always return JSON
+app.use((err, req, res, next) => {
+  if (req.path.startsWith('/api')) {
+    return res.status(500).json({ error: err.message || 'Internal server error' });
+  }
+  next(err);
+});
 
 tryPort(PORT);

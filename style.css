@@ -195,10 +195,16 @@ input, textarea, button, select { font-family: inherit; color: inherit; font-siz
 .friend-avatar-wrapper { position: relative; width: 26px; height: 26px; flex-shrink: 0; }
 .friend-avatar { width: 100%; height: 100%; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: .65rem; color: #fff; }
 .status-indicator { position: absolute; bottom: -1px; right: -1px; width: 8px; height: 8px; border-radius: 50%; border: 2px solid var(--bg-panel-solid); }
-.status-indicator.online { background: var(--online-color); }
-.status-indicator.idle { background: var(--idle-color); }
-.status-indicator.dnd { background: var(--dnd-color); }
-.status-indicator.offline { background: var(--offline-color); }
+.status-indicator.online { background: #22c55e; }
+.status-indicator.idle { background: #a855f7; }
+.status-indicator.dnd { background: #ef4444; }
+.status-indicator.offline { background: #6b7280; }
+/* Small status dot for inline use (messages, etc) */
+.status-dot { position: absolute; bottom: -1px; right: -1px; width: 8px; height: 8px; border-radius: 50%; border: 2px solid var(--bg-panel-solid); flex-shrink: 0; }
+.status-dot.online { background: #22c55e; }
+.status-dot.idle { background: #a855f7; }
+.status-dot.dnd { background: #ef4444; }
+.status-dot.offline { background: #6b7280; }
 
 .friend-details { display: flex; flex-direction: column; overflow: hidden; }
 .friend-username-row { display: flex; align-items: baseline; gap: 3px; }
@@ -423,6 +429,24 @@ input, textarea, button, select { font-family: inherit; color: inherit; font-siz
 .settings-save-btn { width: 100%; margin-top: 8px; font-size: .8rem; padding: 9px; }
 .settings-logout-btn { width: 100%; margin-top: 8px; background: transparent; border: 2px solid #ff3333; color: #ff3333; border-radius: 8px; padding: 9px; font-size: .8rem; font-weight: 600; cursor: pointer; transition: all .2s; display: flex; align-items: center; justify-content: center; gap: 6px; }
 .settings-logout-btn:hover { background: #ff3333; color: #fff; }
+
+/* ===== USER PROFILE MODAL ===== */
+.profile-modal-content { max-width: 320px; text-align: center; padding: 28px 24px 20px; position: relative; }
+.profile-close-btn { position: absolute; top: 8px; right: 8px; }
+.profile-modal-body { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.profile-modal-avatar { width: 72px; height: 72px; border-radius: 50%; background: var(--accent); color: #000; display: flex; align-items: center; justify-content: center; font-size: 1.8rem; font-weight: 700; margin-bottom: 8px; background-size: cover; background-position: center; }
+.profile-modal-avatar[style*="background-image"] { color: transparent; }
+.profile-modal-name { font-size: 1.2rem; font-weight: 700; margin: 0; }
+.profile-modal-username { font-size: 0.75rem; color: var(--text-muted); letter-spacing: 0.3px; }
+.profile-modal-status { font-size: 0.7rem; color: var(--online-color); margin-bottom: 6px; }
+.profile-modal-bio { font-size: 0.75rem; color: var(--text-secondary); line-height: 1.4; margin: 6px 0 12px; max-width: 260px; word-break: break-word; }
+.profile-modal-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; margin-top: 6px; width: 100%; }
+.profile-action-btn { background: var(--bg-surface); border: 1px solid var(--border-color); border-radius: 6px; padding: 7px 14px; font-size: 0.72rem; font-weight: 600; color: var(--text-primary); cursor: pointer; transition: all 0.15s; flex: 1; min-width: 80px; }
+.profile-action-btn:hover { background: var(--accent); color: #000; border-color: var(--accent); }
+.profile-action-btn:disabled { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
+.profile-action-btn.added { background: var(--accent); color: #000; }
+.profile-action-btn.pending { background: transparent; color: var(--text-muted); border-color: var(--text-muted); cursor: default; }
+.profile-action-btn.cooldown { background: transparent; color: var(--text-muted); border-color: var(--text-muted); cursor: default; }
 
 /* ===== CALL UI ===== */
 .call-container { position: fixed; inset: 0; background: rgba(0,0,0,.93); z-index: 5000; display: flex; flex-direction: column; animation: fadeIn .2s ease; }
