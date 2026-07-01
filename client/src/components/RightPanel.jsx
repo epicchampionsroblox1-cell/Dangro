@@ -1,24 +1,56 @@
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { useApp } from "../contexts/AppContext";
-import { api } from "../services/api";
-import ServerSection from "./ServerSection";
 import GroupChatSection from "./GroupChatSection";
 import DMList from "./DMList";
 
 export default function RightPanel() {
   const { state, dispatch } = useApp();
 
+  const currentServer = state.servers.find(s => s.id === state.activeServerId);
+
+  const navItems = [
+    { id: "dms", label: "Friends" },
+    { id: "groupchats", label: "Groups" },
+  ];
+
+  const displayRight = state.activeNavTab !== "dms" || currentServer;
+
   return (
-    <>
-      <div id="right-servers-view" className={"right-view" + (state.activeNavTab === "servers" ? " active" : "")}>
-        <ServerSection />
-      </div>
-      <div id="right-groupchats-view" className={"right-view" + (state.activeNavTab === "groupchats" ? " active" : "")}>
-        <GroupChatSection />
-      </div>
-      <div id="right-dms-view" className={"right-view" + (state.activeNavTab === "dms" ? " active" : "")}>
-        <DMList />
-      </div>
-    </>
+    <div className="right-panel" style={{ display: state.rightPanelCollapsed ? "none" : "flex" }}>
+      {currentServer ? (
+        <>
+          <div className="right-panel-header">
+            <h2>Members</h2>
+          </div>
+          <div className="right-panel-content">
+            <div className="right-section-header">
+              <span>Online — {currentServer.members?.length || 0}</span>
+            </div>
+            {currentServer.members?.map(member => (
+              <div key={member.id} className="member-item">
+                <div className="member-avatar" style={{ background: "#5865f2" }}>
+                  {member.username.charAt(0).toUpperCase()}
+                </div>
+                <span className="member-name">{member.display_name || member.username}</span>
+                <span className="member-status" style={{
+                  background: member.status === "online" ? "var(--green)" :
+                    member.status === "idle" ? "var(--yellow)" :
+                    member.status === "dnd" ? "var(--red)" : "var(--text-muted)"
+                }} />
+              </div>
+            ))}
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="right-panel-header">
+            <h2>Social</h2>
+          </div>
+          <div className="right-panel-content">
+            <DMList />
+          </div>
+        </>
+      )}
+    </div>
   );
 }

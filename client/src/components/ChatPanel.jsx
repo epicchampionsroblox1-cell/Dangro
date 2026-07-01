@@ -1,28 +1,40 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useApp, getActiveChatKey } from "../contexts/AppContext";
 import socket from "../services/socket";
+import { api } from "../services/api";
 import MessageItem from "./MessageItem";
 import EmojiPicker from "./EmojiPicker";
+
+const ACCEPTED_TYPES = "image/*,video/mp4,video/webm,application/pdf,.txt,.zip,.rar";
 
 export default function ChatPanel() {
   const { state, dispatch, loadMessages, sendMessage, addToast } = useApp();
   const [input, setInput] = useState("");
   const [replyTarget, setReplyTarget] = useState(null);
-  const [showEmoji, setShowEmoji] = useState(false);
-  const [typingUser, setTypingUser] = useState(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const [attachments, setAttachments] = useState([]);
+  const [uploading, setUploading] = useState(false);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
-  const [mediaModalOpen, setMediaModalOpen] = useState(false);
-  const [mediaUrl, setMediaUrl] = useState("");
-
+  const scrollRef = useRef(null);
+  const fileInputRef = useRef(null);
   const chatKey = getActiveChatKey(state);
   const messages = state.messages[chatKey] || [];
   const query = state.chatSearchQuery.trim().toLowerCase();
-  const filtered = query ? messages.filter(m => m.content.toLowerCase().includes(query) || m.sender.toLowerCase().includes(query)) : messages;
+  const filtered = query
+    ? messages.filter(m => m.content?.toLowerCase().includes(query) || m.sender?.toLowerCase().includes(query))
+    : messages;
+
+  const hasMore = state.messageCursors[chatKey]?.hasMore;
+  const typingData = state.typingUsers[chatKey];
+  const typingUsers = typingData?.isTyping ? [typingData.username] : [];
 
   useEffect(() => {
     if (chatKey) {
-      loadMessages(chatKey);
+      setLoading(true);
+      loadMessages(chatKey).finally(() => setLoading(false));
       socket.emit("join:chat", chatKey);
       return () => { socket.emit("leave:chat", chatKey); };
     }
@@ -32,44 +44,41 @@ export default function ChatPanel() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [filtered.length]);
 
-  useEffect(() => {
-    socket.on("typing:update", (data) => {
-      if (data.isTyping) {
-        setTypingUser(data.username);
-      } else {
-        setTypingUser(null);
+  const handleScroll = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el || !hasMore || loading) return;
+    if (el.scrollTop < 100) {
+      const firstMsg = messages[0];
+      if (firstMsg) {
+        setLoading(true);
+        loadMessages(chatKey, { before: firstMsg.id, limit: 50 }).finally(() => setLoading(false));
       }
-    });
-    return () => { socket.off("typing:update"); };
-  }, []);
+    }
+  }, [hasMore, loading, messages, chatKey, loadMessages]);
 
   function handleSend() {
     const content = input.trim();
-    if (!content) return;
-    sendMessage(content, false, replyTarget ? { sender: replyTarget.sender, content: replyTarget.content } : null);
+    if (!content && attachments.length === 0) return;
+    sendMessage(
+      content || " ",
+      false,
+      replyTarget ? { sender: replyTarget.sender, content: replyTarget.content } : null,
+      attachments
+    );
     setInput("");
     setReplyTarget(null);
+    setAttachments([]);
     socket.emit("typing:stop", { chatKey, username: state.displayName });
-    if (inputRef.current) {
-      inputRef.current.style.height = "auto";
-    }
-  }
-
-  function handleInputChange(e) {
-    setInput(e.target.value);
-    e.target.style.height = "auto";
-    e.target.style.height = e.target.scrollHeight + "px";
-    if (e.target.value.trim()) {
-      socket.emit("typing:start", { chatKey, username: state.displayName });
-    } else {
-      socket.emit("typing:stop", { chatKey, username: state.displayName });
-    }
   }
 
   function handleKeyDown(e) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
+    }
+    if (e.key === "Escape") {
+      setReplyTarget(null);
+      setShowEmojiPicker(false);
     }
   }
 
@@ -78,66 +87,113 @@ export default function ChatPanel() {
     inputRef.current?.focus();
   }
 
-  function cancelReply() {
-    setReplyTarget(null);
+  function handleEmojiSelect(emoji) {
+    setInput(prev => prev + emoji);
+    setShowEmojiPicker(false);
+    inputRef.current?.focus();
   }
 
-  function sendMedia() {
-    const url = mediaUrl.trim();
-    if (!url) return;
-    sendMessage(url, true, null);
-    setMediaUrl("");
-    setMediaModalOpen(false);
-  }
-
-  function handleClearChat() {
-    if (window.confirm("Clear chat history?")) {
-      dispatch({ type: "SET_MESSAGES", chatKey, payload: [] });
+  async function handleFileSelect(files) {
+    const fileArray = Array.from(files);
+    if (fileArray.length === 0) return;
+    setUploading(true);
+    try {
+      const uploaded = await api.upload.multiple(fileArray, (progress) => {
+        dispatch({ type: "SET_UPLOAD_PROGRESS", payload: progress });
+      });
+      setAttachments(prev => [...prev, ...uploaded]);
+      addToast(`${uploaded.length} file(s) uploaded`, "success");
+    } catch (e) {
+      addToast(e.message || "Upload failed", "error");
+    } finally {
+      setUploading(false);
+      dispatch({ type: "SET_UPLOAD_PROGRESS", payload: null });
     }
+  }
+
+  function handleDrop(e) {
+    e.preventDefault();
+    setDragOver(false);
+    handleFileSelect(e.dataTransfer.files);
+  }
+
+  function handleDragOver(e) {
+    e.preventDefault();
+    setDragOver(true);
+  }
+
+  function handleDragLeave() {
+    setDragOver(false);
+  }
+
+  function removeAttachment(index) {
+    setAttachments(prev => prev.filter((_, i) => i !== index));
   }
 
   function getChatInfo() {
     if (state.activeChatType === "channel") {
       const server = state.servers.find(s => s.id === state.activeServerId);
-      const channel = server?.channels.find(c => c.id === state.activeChannelId);
+      const channel = server?.channels?.find(c => c.id === state.activeChannelId);
       return { prefix: "#", name: channel?.name || "general", desc: channel ? "Text channel in " + server?.name : "" };
     } else if (state.activeChatType === "dm") {
       const friend = state.friends.find(f => f.id === state.activeDmFriendId);
-      return { prefix: "@", name: friend?.username || "User DMs", desc: friend?.status?.toUpperCase() + (friend?.customStatus ? " - " + friend.customStatus : "") };
+      return { prefix: "@", name: friend?.username || "User", desc: "" };
     } else if (state.activeChatType === "group") {
       const group = state.groupChats.find(g => g.id === state.activeGroupChatId);
-      return { prefix: "📢", name: group?.name || "Group Chat", desc: group ? group.members.length + " members" : "" };
+      return { prefix: "\uD83D\uDCE2", name: group?.name || "Group", desc: group ? group.members?.length + " members" : "" };
     }
     return { prefix: "#", name: "general", desc: "" };
   }
 
   const info = getChatInfo();
 
+  if (!chatKey) {
+    return (
+      <div className="chat-area">
+        <div className="empty-state" style={{ height: "100%" }}>
+          <div className="empty-state-icon">\uD83D\uDCAC</div>
+          <div className="empty-state-title">Select a conversation</div>
+          <div className="empty-state-desc">Choose a channel or friend from the sidebar to start chatting.</div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <>
-      <header className="chat-header">
-        <div className="chat-header-title">
-          <span className="chat-hash">{info.prefix}</span>
-          <h2 id="chat-header-name">{info.name}</h2>
-          {info.desc && <p className="chat-header-desc">{info.desc}</p>}
+    <div
+      className={"chat-area" + (dragOver ? " drag-over" : "")}
+      onDrop={handleDrop}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+    >
+      <div className="chat-header">
+        <div className="chat-header-left">
+          <span className="chat-header-hash">{info.prefix}</span>
+          <span className="chat-header-name">{info.name}</span>
+          {info.desc && <span className="chat-header-desc">{info.desc}</span>}
         </div>
         <div className="chat-header-actions">
           <div className="chat-search">
-            <input type="text" placeholder="Search..." value={state.chatSearchQuery}
+            <input type="text" placeholder="Search" value={state.chatSearchQuery}
               onChange={e => dispatch({ type: "SET_CHAT_SEARCH", payload: e.target.value })} />
           </div>
-          <button className="header-action-btn" title="Clear Chat" onClick={handleClearChat}>🗑️</button>
         </div>
-      </header>
+      </div>
 
-      <div className="chat-messages" id="chat-messages-container">
-        {filtered.length === 0 ? (
-          <div style={{
-            flexGrow: 1, display: "flex", flexDirection: "column", alignItems: "center",
-            justifyContent: "center", color: "var(--text-muted)", fontSize: "0.8rem", padding: "20px"
-          }}>
-            <div style={{ fontSize: "2rem", marginBottom: "8px" }}>💬</div>
-            <p>{query ? "No messages match your search." : "No messages yet."}</p>
+      <div className="chat-messages" ref={scrollRef} onScroll={handleScroll}>
+        {loading && messages.length > 0 && (
+          <div className="chat-loading">
+            <div className="loading-spinner" />
+            Loading more...
+          </div>
+        )}
+        {filtered.length === 0 && !loading ? (
+          <div className="empty-state" style={{ height: "100%" }}>
+            <div className="empty-state-icon">{query ? "\uD83D\uDD0D" : "\uD83D\uDCAC"}</div>
+            <div className="empty-state-title">{query ? "No results" : "No messages yet"}</div>
+            <div className="empty-state-desc">
+              {query ? "No messages match your search." : "Send a message to start the conversation."}
+            </div>
           </div>
         ) : (
           filtered.map(msg => (
@@ -147,48 +203,95 @@ export default function ChatPanel() {
         <div ref={messagesEndRef} />
       </div>
 
+      <div className="chat-upload-area">
+        {dragOver && (
+          <div className="drag-overlay">
+            Drop files to upload
+          </div>
+        )}
+        {uploading && state.uploadProgress !== null && (
+          <div className="upload-progress">
+            <div className="upload-progress-bar" style={{ width: state.uploadProgress + "%" }} />
+            <span className="upload-progress-text">{state.uploadProgress}%</span>
+          </div>
+        )}
+      </div>
+
+      {attachments.length > 0 && (
+        <div className="attachment-preview-bar">
+          {attachments.map((att, i) => (
+            <div key={i} className="attachment-preview-item">
+              <div className="attachment-icon">
+                {att.type === "image" ? "\uD83D\uDDBC" : "\uD83D\uDCCE"}
+              </div>
+              <div className="attachment-info">
+                <div className="attachment-name">{att.name}</div>
+                <div className="attachment-size">{Math.round(att.size / 1024)}KB</div>
+              </div>
+              <button className="attachment-remove" onClick={() => removeAttachment(i)}>&#10005;</button>
+            </div>
+          ))}
+        </div>
+      )}
+
       {replyTarget && (
         <div className="reply-preview">
           <div className="reply-preview-content">
-            <span className="reply-preview-label">Replying to <span id="reply-target-name">{replyTarget.sender}</span></span>
-            <span id="reply-target-text" className="reply-preview-text">{replyTarget.content.substring(0, 100)}</span>
+            <span className="reply-preview-label">Replying to {replyTarget.sender}</span>
+            <span className="reply-preview-text">{replyTarget.content?.substring(0, 80)}</span>
           </div>
-          <button className="reply-cancel-btn" onClick={cancelReply}>✕</button>
+          <button className="reply-cancel-btn" onClick={() => setReplyTarget(null)}>&#10005;</button>
         </div>
       )}
 
-      <footer className="chat-footer">
-        {typingUser && (
-          <div className="typing-indicator-bar">
-            <span className="typing-dots"><span></span><span></span><span></span></span>
-            <span className="typing-text">{typingUser} is typing...</span>
-          </div>
-        )}
-        <div className="input-actions-wrapper">
-          <button className="input-action-btn" title="Attach" onClick={() => setMediaModalOpen(true)}>📎</button>
-          <div className="chat-input-box">
-            <textarea ref={inputRef} id="message-input" placeholder={"Message " + info.prefix + info.name + "..."}
-              rows="1" value={input} onChange={handleInputChange} onKeyDown={handleKeyDown}></textarea>
-          </div>
-          <button className="input-action-btn" title="Emoji" onClick={(e) => { e.stopPropagation(); setShowEmoji(!showEmoji); }}>😀</button>
-          {showEmoji && <EmojiPicker onSelect={(emoji) => { setInput(prev => prev + emoji); inputRef.current?.focus(); }} onClose={() => setShowEmoji(false)} />}
-          <button className="input-action-btn send-btn" title="Send" onClick={handleSend}>➤</button>
-        </div>
-      </footer>
-
-      {mediaModalOpen && (
-        <div className="modal" onClick={() => setMediaModalOpen(false)}>
-          <div className="modal-content" onClick={e => e.stopPropagation()}>
-            <h3>Attach Image Link</h3>
-            <p>Paste a direct image URL (JPEG, PNG, GIF).</p>
-            <input type="text" placeholder="https://..." className="modal-input" value={mediaUrl} onChange={e => setMediaUrl(e.target.value)} />
-            <div className="modal-buttons">
-              <button className="modal-btn cancel" onClick={() => setMediaModalOpen(false)}>Cancel</button>
-              <button className="modal-btn submit" onClick={sendMedia}>Attach</button>
+      <div className="typing-indicator">
+        {typingUsers.length > 0 && typingUsers[0] !== state.displayName && (
+          <>
+            <div className="typing-dots">
+              <span /><span /><span />
             </div>
-          </div>
+            {typingUsers[0]} is typing...
+          </>
+        )}
+      </div>
+
+      <div className="chat-input-area">
+        <div className="chat-input-wrapper">
+          <button className="input-action-btn" onClick={() => fileInputRef.current?.click()} title="Attach file">
+            +
+          </button>
+          <input
+            type="file"
+            ref={fileInputRef}
+            accept={ACCEPTED_TYPES}
+            multiple
+            className="hidden"
+            onChange={e => { handleFileSelect(e.target.files); e.target.value = ""; }}
+          />
+          <button className="input-action-btn" onClick={() => setShowEmojiPicker(!showEmojiPicker)} title="Emoji">
+            &#128522;
+          </button>
+          <input
+            ref={inputRef}
+            type="text"
+            placeholder={"Message #" + info.name}
+            value={input}
+            onChange={e => {
+              setInput(e.target.value);
+              if (e.target.value.trim()) socket.emit("typing:start", { chatKey, username: state.displayName });
+              else socket.emit("typing:stop", { chatKey, username: state.displayName });
+            }}
+            onKeyDown={handleKeyDown}
+          />
+          <button className="send-btn" onClick={handleSend} disabled={!input.trim() && attachments.length === 0} title="Send">
+            &#10148;
+          </button>
         </div>
+      </div>
+
+      {showEmojiPicker && (
+        <EmojiPicker onSelect={handleEmojiSelect} onClose={() => setShowEmojiPicker(false)} />
       )}
-    </>
+    </div>
   );
 }
