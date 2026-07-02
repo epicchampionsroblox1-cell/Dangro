@@ -1,0 +1,199 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  username     String   @unique
+  email        String   @default("")
+  passwordHash String   @map("password_hash")
+  displayName  String   @map("display_name")
+  bio          String   @default("")
+  status       String   @default("online")
+  customStatus String   @default("") @map("custom_status")
+  profilePic   String   @default("") @map("profile_pic")
+  theme        String   @default("dark")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  refreshTokens RefreshToken[]
+  ownedServers  Server[]
+  memberships   ServerMember[]
+  sentRequests  Friendship[] @relation("UserSentRequests")
+  recvRequests  Friendship[] @relation("UserRecvRequests")
+  invites      Invite[]
+  groupChats   GroupChat[]
+  roleMembers  RoleMember[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+model Server {
+  id         String   @id
+  name       String
+  icon       String   @default("D")
+  ownerId    String   @map("owner_id")
+  inviteCode String?  @unique @map("invite_code")
+  isPublic   Boolean  @default(true) @map("is_public")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  owner   User           @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  members ServerMember[]
+  channels Channel[]
+  roles    Role[]
+  invites  Invite[]
+
+  @@map("servers")
+}
+
+model ServerMember {
+  serverId String   @map("server_id")
+  userId   String   @map("user_id")
+  joinedAt DateTime @default(now()) @map("joined_at")
+
+  server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([serverId, userId])
+  @@map("server_members")
+}
+
+model Channel {
+  id       String
+  serverId String   @map("server_id")
+  name     String
+  type     String   @default("text")
+  category String   @default("")
+  position Int      @default(0)
+
+  server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@id([id, serverId])
+  @@map("channels")
+}
+
+model Message {
+  id              String    @id
+  seq             Int       @default(autoincrement())
+  chatKey         String    @map("chat_key")
+  sender          String
+  content         String    @default("")
+  timestamp       DateTime  @default(now())
+  editedAt        DateTime? @map("edited_at")
+  isImage         Boolean   @default(false) @map("is_image")
+  system          Boolean   @default(false)
+  replyToSender   String?   @map("reply_to_sender")
+  replyToContent  String?   @map("reply_to_content")
+  attachments     String    @default("[]")
+
+  reactions Reaction[]
+
+  @@index([chatKey])
+  @@index([timestamp])
+  @@map("messages")
+}
+
+model Reaction {
+  messageId String @map("message_id")
+  emoji     String
+  username  String
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@id([messageId, emoji, username])
+  @@map("reactions")
+}
+
+model Friendship {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  friendId  String   @map("friend_id")
+  status    String   @default("pending")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user   User @relation("UserSentRequests", fields: [userId], references: [id], onDelete: Cascade)
+  friend User @relation("UserRecvRequests", fields: [friendId], references: [id], onDelete: Cascade)
+
+  @@map("friendships")
+}
+
+model Role {
+  id          String   @id @default(uuid())
+  serverId    String   @map("server_id")
+  name        String
+  color       String   @default("#ffffff")
+  position    Int      @default(0)
+  permissions Int      @default(0)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  server  Server       @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  members RoleMember[]
+
+  @@map("roles")
+}
+
+model RoleMember {
+  roleId String @map("role_id")
+  userId String @map("user_id")
+
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, userId])
+  @@map("role_members")
+}
+
+model Invite {
+  code      String    @id
+  serverId  String    @map("server_id")
+  createdBy String    @map("created_by")
+  maxUses   Int       @default(0) @map("max_uses")
+  useCount  Int       @default(0) @map("use_count")
+  expiresAt DateTime? @map("expires_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  server  Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  creator User   @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+
+  @@map("invites")
+}
+
+model GroupChat {
+  id        String   @id @default(uuid())
+  name      String
+  createdBy String   @map("created_by")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  creator User          @relation(fields: [createdBy], references: [id])
+  members GroupMember[]
+
+  @@map("group_chats")
+}
+
+model GroupMember {
+  groupId  String @map("group_id")
+  username String
+
+  group GroupChat @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, username])
+  @@map("group_members")
+}

@@ -1,62 +1,83 @@
-import { v4 as uuidv4 } from "uuid";
 import bcrypt from "bcryptjs";
-import { getOne, getAll, run } from "../manager.js";
+import { prisma } from "../init.js";
 
 export const UserRepository = {
   findById(id) {
-    return getOne("SELECT * FROM users WHERE id = ?", [id]);
+    return prisma.user.findUnique({ where: { id } });
   },
 
   findByUsername(username) {
-    return getOne("SELECT * FROM users WHERE username = ?", [username]);
+    return prisma.user.findUnique({ where: { username } });
   },
 
   findByEmail(email) {
-    return getOne("SELECT * FROM users WHERE email = ?", [email]);
+    if (!email) return null;
+    return prisma.user.findFirst({ where: { email } });
   },
 
   async create({ username, email, password }) {
-    const id = uuidv4();
     const passwordHash = await bcrypt.hash(password, 12);
-    run(
-      `INSERT INTO users (id, username, email, password_hash, display_name, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
-      [id, username, email || "", passwordHash, username]
-    );
-    return this.findById(id);
+    return prisma.user.create({
+      data: {
+        username,
+        email: email || "",
+        passwordHash,
+        displayName: username,
+      },
+    });
   },
 
   async updatePassword(id, newPassword) {
     const passwordHash = await bcrypt.hash(newPassword, 12);
-    run("UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?", [passwordHash, id]);
+    return prisma.user.update({
+      where: { id },
+      data: { passwordHash },
+    });
   },
 
   updateProfile(id, fields) {
-    const allowed = ["display_name", "bio", "status", "custom_status", "profile_pic", "theme"];
-    const updates = [];
-    const values = [];
-    for (const key of allowed) {
-      if (fields[key] !== undefined) {
-        updates.push(`${key} = ?`);
-        values.push(fields[key]);
-      }
+    const map = {
+      display_name: "displayName",
+      custom_status: "customStatus",
+      profile_pic: "profilePic",
+    };
+    const data = {};
+    for (const [snake, camel] of Object.entries(map)) {
+      if (fields[snake] !== undefined) data[camel] = fields[snake];
     }
-    if (updates.length === 0) return this.findById(id);
-    updates.push("updated_at = datetime('now')");
-    values.push(id);
-    run(`UPDATE users SET ${updates.join(", ")} WHERE id = ?`, values);
-    return this.findById(id);
+    for (const key of ["bio", "status", "theme"]) {
+      if (fields[key] !== undefined) data[key] = fields[key];
+    }
+    if (Object.keys(data).length === 0) return this.findById(id);
+    return prisma.user.update({ where: { id }, data });
   },
 
   async verifyPassword(user, password) {
-    return bcrypt.compare(password, user.password_hash);
+    return bcrypt.compare(password, user.passwordHash);
   },
 
   search(query, excludeId) {
-    const q = `%${query}%`;
-    if (excludeId) {
-      return getAll("SELECT id, username, display_name, status, custom_status, profile_pic FROM users WHERE (username LIKE ? OR display_name LIKE ?) AND id != ? LIMIT 20", [q, q, excludeId]);
-    }
-    return getAll("SELECT id, username, display_name, status, custom_status, profile_pic FROM users WHERE username LIKE ? OR display_name LIKE ? LIMIT 20", [q, q]);
-  }
+    return prisma.user.findMany({
+      where: {
+        AND: [
+          { id: { not: excludeId } },
+          {
+            OR: [
+              { username: { contains: query } },
+              { displayName: { contains: query } },
+            ],
+          },
+        ],
+      },
+      select: {
+        id: true,
+        username: true,
+        displayName: true,
+        status: true,
+        customStatus: true,
+        profilePic: true,
+      },
+      take: 20,
+    });
+  },
 };

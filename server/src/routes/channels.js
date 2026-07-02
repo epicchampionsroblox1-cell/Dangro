@@ -1,35 +1,54 @@
 import { Router } from "express";
-import { getOne, run, getAll } from "../database/init.js";
+import { prisma } from "../database/init.js";
 
 export const channelsRouter = Router();
 
-channelsRouter.post("/", (req, res) => {
-  const { serverId, name, type, category } = req.body;
-  if (!serverId || !name) return res.status(400).json({ error: "serverId and name required" });
+channelsRouter.post("/", async (req, res) => {
+  try {
+    const { serverId, name, type, category } = req.body;
+    if (!serverId || !name) return res.status(400).json({ error: "serverId and name required" });
 
-  const memberCheck = getOne("SELECT * FROM server_members WHERE server_id = ? AND user_id = ?", [serverId, req.userId]);
-  if (!memberCheck) return res.status(403).json({ error: "Not a member of this server" });
+    const member = await prisma.serverMember.findUnique({
+      where: { serverId_userId: { serverId, userId: req.userId } },
+    });
+    if (!member) return res.status(403).json({ error: "Not a member of this server" });
 
-  const id = name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-_]/g, "");
-  const existing = getOne("SELECT id FROM channels WHERE id = ? AND server_id = ?", [id, serverId]);
-  if (existing) return res.status(409).json({ error: "Channel already exists" });
+    const id = name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-_]/g, "");
+    const existing = await prisma.channel.findUnique({
+      where: { id_serverId: { id, serverId } },
+    });
+    if (existing) return res.status(409).json({ error: "Channel already exists" });
 
-  const channelType = type === "voice" ? "voice" : "text";
-  const maxPos = getOne("SELECT MAX(position) as max_pos FROM channels WHERE server_id = ?", [serverId]);
-  const position = (maxPos?.max_pos || 0) + 1;
+    const channelType = type === "voice" ? "voice" : "text";
+    const lastChannel = await prisma.channel.findFirst({
+      where: { serverId },
+      orderBy: { position: "desc" },
+    });
+    const position = (lastChannel?.position ?? -1) + 1;
 
-  run("INSERT INTO channels (id, server_id, name, type, category, position) VALUES (?, ?, ?, ?, ?, ?)",
-    [id, serverId, name, channelType, category || "", position]);
-
-  res.status(201).json({ id, server_id: serverId, name, type: channelType, category: category || "", position });
+    const channel = await prisma.channel.create({
+      data: { id, serverId, name, type: channelType, category: category || "", position },
+    });
+    res.status(201).json(channel);
+  } catch (err) {
+    console.error("Create channel error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
 });
 
-channelsRouter.delete("/:serverId/:channelId", (req, res) => {
-  const { serverId, channelId } = req.params;
-  const server = getOne("SELECT * FROM servers WHERE id = ?", [serverId]);
-  if (!server) return res.status(404).json({ error: "Server not found" });
-  if (server.owner_id !== req.userId) return res.status(403).json({ error: "Only the server owner can delete channels" });
+channelsRouter.delete("/:serverId/:channelId", async (req, res) => {
+  try {
+    const { serverId, channelId } = req.params;
+    const server = await prisma.server.findUnique({ where: { id: serverId } });
+    if (!server) return res.status(404).json({ error: "Server not found" });
+    if (server.ownerId !== req.userId) return res.status(403).json({ error: "Only the server owner can delete channels" });
 
-  run("DELETE FROM channels WHERE id = ? AND server_id = ?", [channelId, serverId]);
-  res.json({ success: true });
+    await prisma.channel.delete({
+      where: { id_serverId: { id: channelId, serverId } },
+    });
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Delete channel error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
 });

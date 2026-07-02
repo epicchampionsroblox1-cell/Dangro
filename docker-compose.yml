@@ -7,10 +7,11 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3001
-      - DATABASE_PATH=/data/dangro.db
-      - CORS_ORIGIN=http://localhost:3001
-      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
-      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET:-change-me-too}
+      - DATABASE_URL=${DATABASE_URL?required}
+      - CORS_ORIGIN=https://your-username.github.io
+      - UPLOAD_DIR=/data/uploads
+      - JWT_SECRET=${JWT_SECRET?required}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET?required}
     volumes:
       - dangro-data:/data
     restart: unless-stopped
