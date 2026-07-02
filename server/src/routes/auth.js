@@ -15,13 +15,13 @@ function sanitizeUser(user) {
     id: user.id,
     username: user.username,
     email: user.email,
-    displayName: user.display_name,
+    displayName: user.displayName,
     bio: user.bio,
     status: user.status,
-    customStatus: user.custom_status,
-    profilePic: user.profile_pic,
+    customStatus: user.customStatus,
+    profilePic: user.profilePic,
     theme: user.theme,
-    createdAt: user.created_at,
+    createdAt: user.createdAt,
   };
 }
 
