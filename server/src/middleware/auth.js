@@ -3,7 +3,7 @@ import { UserRepository } from "../database/repositories/userRepository.js";
 
 const JWT_SECRET = process.env.JWT_SECRET || "dangro-dev-jwt-secret";
 
-export function authenticateToken(req, res, next) {
+export async function authenticateToken(req, res, next) {
   const authHeader = req.headers["authorization"];
   const token = authHeader && authHeader.split(" ")[1];
 
@@ -13,7 +13,7 @@ export function authenticateToken(req, res, next) {
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    const user = UserRepository.findById(decoded.userId);
+    const user = await UserRepository.findById(decoded.userId);
     if (!user) {
       return res.status(401).json({ error: "User not found" });
     }
@@ -28,14 +28,14 @@ export function authenticateToken(req, res, next) {
   }
 }
 
-export function optionalAuth(req, res, next) {
+export async function optionalAuth(req, res, next) {
   const authHeader = req.headers["authorization"];
   const token = authHeader && authHeader.split(" ")[1];
 
   if (token) {
     try {
       const decoded = jwt.verify(token, JWT_SECRET);
-      req.user = UserRepository.findById(decoded.userId);
+      req.user = await UserRepository.findById(decoded.userId);
       req.userId = decoded.userId;
     } catch {
       // Token invalid, continue without auth
