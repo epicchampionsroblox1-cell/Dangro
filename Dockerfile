@@ -10,7 +10,7 @@ WORKDIR /app
 COPY server/package*.json ./
 COPY server/prisma/ prisma/
 RUN npm ci && npx prisma generate
-COPY server/ src/
+COPY server/src/ src/
 COPY --from=builder /app/client/dist public/
 EXPOSE 3001
 ENV NODE_ENV=production
