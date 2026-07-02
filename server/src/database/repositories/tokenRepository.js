@@ -1,39 +1,34 @@
-import { v4 as uuidv4 } from "uuid";
-import { getOne, getAll, run } from "../manager.js";
+import { prisma } from "../init.js";
 
 export const TokenRepository = {
   create(userId, token, expiresAt) {
-    const id = uuidv4();
-    run(
-      "INSERT INTO refresh_tokens (id, user_id, token, expires_at) VALUES (?, ?, ?, ?)",
-      [id, userId, token, expiresAt]
-    );
-    return { id, token, expiresAt };
+    return prisma.refreshToken.create({
+      data: { userId, token, expiresAt: new Date(expiresAt) },
+    });
   },
 
   findByToken(token) {
-    return getOne(
-      "SELECT * FROM refresh_tokens WHERE token = ? AND expires_at > datetime('now')",
-      [token]
-    );
+    return prisma.refreshToken.findFirst({
+      where: { token, expiresAt: { gt: new Date() } },
+    });
   },
 
   findByUserId(userId) {
-    return getAll(
-      "SELECT * FROM refresh_tokens WHERE user_id = ? AND expires_at > datetime('now') ORDER BY created_at DESC",
-      [userId]
-    );
+    return prisma.refreshToken.findMany({
+      where: { userId, expiresAt: { gt: new Date() } },
+      orderBy: { createdAt: "desc" },
+    });
   },
 
   deleteByToken(token) {
-    run("DELETE FROM refresh_tokens WHERE token = ?", [token]);
+    return prisma.refreshToken.deleteMany({ where: { token } });
   },
 
   deleteAllForUser(userId) {
-    run("DELETE FROM refresh_tokens WHERE user_id = ?", [userId]);
+    return prisma.refreshToken.deleteMany({ where: { userId } });
   },
 
   cleanup() {
-    run("DELETE FROM refresh_tokens WHERE expires_at <= datetime('now')");
-  }
+    return prisma.refreshToken.deleteMany({ where: { expiresAt: { lte: new Date() } } });
+  },
 };

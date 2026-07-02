@@ -8,7 +8,8 @@ RUN cd client && npm run build
 FROM node:20-alpine
 WORKDIR /app
 COPY server/package*.json ./
-RUN npm ci
+COPY server/prisma/ prisma/
+RUN npm ci && npx prisma generate
 COPY server/ src/
 COPY --from=builder /app/client/dist public/
 EXPOSE 3001
