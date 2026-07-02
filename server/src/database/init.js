@@ -1,20 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 
-function buildDatabaseUrl() {
-  const url = process.env.DATABASE_URL;
-  if (!url) return undefined;
-  if ((url.startsWith("postgresql://") || url.startsWith("postgres://")) && !url.includes("sslmode")) {
-    const sep = url.includes("?") ? "&" : "?";
-    const fixed = `${url}${sep}sslmode=require`;
-    console.log("DATABASE_URL missing sslmode=require — injecting automatically");
-    return fixed;
-  }
-  return url;
-}
-
-export const prisma = new PrismaClient({
-  datasources: { db: { url: buildDatabaseUrl() } },
-});
+export const prisma = new PrismaClient();
 
 export async function initDatabase() {
   try {
