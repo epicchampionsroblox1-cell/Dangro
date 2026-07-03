@@ -8,16 +8,9 @@ export default function RightPanel() {
 
   const currentServer = state.servers.find(s => s.id === state.activeServerId);
 
-  const navItems = [
-    { id: "dms", label: "Friends" },
-    { id: "groupchats", label: "Groups" },
-  ];
-
-  const displayRight = state.activeNavTab !== "dms" || currentServer;
-
   return (
     <div className="right-panel" style={{ display: state.rightPanelCollapsed ? "none" : "flex" }}>
-      {currentServer ? (
+      {currentServer && state.activeNavTab === "servers" ? (
         <>
           <div className="right-panel-header">
             <h2>Members</h2>
@@ -39,6 +32,15 @@ export default function RightPanel() {
                 }} />
               </div>
             ))}
+          </div>
+        </>
+      ) : state.activeNavTab === "dms" ? (
+        <>
+          <div className="right-panel-header">
+            <h2>Direct Messages</h2>
+          </div>
+          <div className="right-panel-content">
+            <DMList />
           </div>
         </>
       ) : (

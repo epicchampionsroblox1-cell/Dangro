@@ -43,7 +43,7 @@ export function registerChatHandlers(io, socket) {
       console.error("Socket message:send error:", err);
     }
 
-    io.to(chatKey).emit("message:new", {
+    const msgPayload = {
       id,
       chatKey,
       sender,
@@ -55,7 +55,10 @@ export function registerChatHandlers(io, socket) {
       replyTo: replyTo || null,
       attachments: attachments || [],
       editedAt: null,
-    });
+    };
+
+    socket.to(chatKey).emit("message:new", msgPayload);
+    socket.emit("message:sent", msgPayload);
   });
 
   socket.on("message:edit", async (data) => {

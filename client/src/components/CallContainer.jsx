@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useApp } from "../contexts/AppContext";
 
 export default function CallContainer({ onClose }) {
@@ -36,7 +36,6 @@ export default function CallContainer({ onClose }) {
         const secs = (elapsed % 60).toString().padStart(2, "0");
         setTimer(mins + ":" + secs);
       }, 1000);
-      addToast("Call started!", "success");
 
       setTimeout(() => {
         if (!localStreamRef.current) return;
@@ -51,7 +50,6 @@ export default function CallContainer({ onClose }) {
         ctx.fillText("pixel_alex", 240, 240);
         const canvasStream = canvas.captureStream(10);
         if (remoteVideoRef.current) remoteVideoRef.current.srcObject = canvasStream;
-        addToast("pixel_alex joined the call", "success");
       }, 2000);
 
     } catch (err) {
@@ -103,7 +101,6 @@ export default function CallContainer({ onClose }) {
         if (localVideoRef.current) localVideoRef.current.srcObject = newStream;
       } catch {}
       setScreenSharing(false);
-      addToast("Screen sharing stopped", "info");
     } else {
       try {
         const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
@@ -117,10 +114,7 @@ export default function CallContainer({ onClose }) {
         localStreamRef.current = screenStream;
         if (localVideoRef.current) localVideoRef.current.srcObject = screenStream;
         setScreenSharing(true);
-        addToast("Screen sharing started", "success");
-      } catch {
-        addToast("Screen sharing cancelled", "info");
-      }
+      } catch {}
     }
   }
 
@@ -135,9 +129,15 @@ export default function CallContainer({ onClose }) {
   return (
     <div className="call-container">
       <div className="call-header">
-        <span id="call-status-text">In Call</span>
+        <div className="call-header-left">
+          <span className="call-status-dot" />
+          <span id="call-status-text">In Call</span>
+        </div>
         <div className="call-timer">{timer}</div>
-        <button className="call-end-btn" onClick={stopCall}>End Call</button>
+        <div className="call-header-right">
+          <span className="call-participant-count">{participants.length} participant{participants.length !== 1 ? "s" : ""}</span>
+          <button className="call-end-btn" onClick={stopCall}>End Call</button>
+        </div>
       </div>
       <div className="call-grid">
         <div className="call-video-container">
@@ -150,13 +150,18 @@ export default function CallContainer({ onClose }) {
         </div>
       </div>
       <div className="call-controls">
-        <button className={"call-control-btn" + (micMuted ? " muted" : " active")} title="Toggle Mic" onClick={toggleMic}>🎤</button>
-        <button className={"call-control-btn" + (videoOff ? " muted" : " active")} title="Toggle Camera" onClick={toggleVideo}>📹</button>
-        <button className={"call-control-btn" + (screenSharing ? " muted" : "")} title="Share Screen" onClick={toggleScreenShare}>🖥️</button>
-        <button className={"call-control-btn" + (volumeMuted ? " muted" : " active")} title="Toggle Volume" onClick={toggleVolume}>🔊</button>
-      </div>
-      <div className="call-participants">
-        <span className="call-participant-count">Participants: <span id="participant-count">{participants.length}</span></span>
+        <button className={"call-control-btn" + (micMuted ? " muted" : " active")} title="Toggle Mic" onClick={toggleMic}>
+          {micMuted ? "\uD83D\uDD07" : "\uD83C\uDFA4"}
+        </button>
+        <button className={"call-control-btn" + (videoOff ? " muted" : " active")} title="Toggle Camera" onClick={toggleVideo}>
+          {videoOff ? "\uD83D\uDDF3" : "\uD83D\uDCF7"}
+        </button>
+        <button className={"call-control-btn" + (screenSharing ? " muted" : "")} title="Share Screen" onClick={toggleScreenShare}>
+          {"\uD83D\uDDA5"}
+        </button>
+        <button className={"call-control-btn" + (volumeMuted ? " muted" : " active")} title="Toggle Volume" onClick={toggleVolume}>
+          {volumeMuted ? "\uD83D\uDD07" : "\uD83D\uDD0A"}
+        </button>
       </div>
     </div>
   );

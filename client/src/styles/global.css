@@ -2333,3 +2333,315 @@ a:hover { text-decoration: underline; }
   .chat-area { display: none; }
   .left-panel.active + .chat-area { display: flex; }
 }
+
+/* ===== LOGIN PAGE IMPROVEMENTS ===== */
+.login-page {
+  position: relative;
+  overflow: hidden;
+}
+
+.login-bg-decoration {
+  position: fixed;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(ellipse at 30% 50%, rgba(88,101,242,0.08) 0%, transparent 50%),
+              radial-gradient(ellipse at 70% 50%, rgba(35,165,90,0.05) 0%, transparent 50%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.login-card {
+  position: relative;
+  z-index: 1;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 8px 40px rgba(0,0,0,0.3);
+}
+
+.login-logo-ring {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), #7c3aed);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 16px;
+  box-shadow: 0 4px 20px rgba(88,101,242,0.3);
+}
+
+.login-logo {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--bg-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--accent);
+}
+
+.login-submit {
+  background: linear-gradient(135deg, var(--accent), #7c3aed) !important;
+  border: none !important;
+  height: 44px;
+}
+
+.login-submit:hover:not(:disabled) {
+  opacity: 0.9;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(88,101,242,0.3);
+}
+
+.login-field input:focus {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 2px rgba(88,101,242,0.15);
+}
+
+.login-tab.active {
+  border-bottom-color: var(--accent) !important;
+  color: var(--text-primary);
+}
+
+/* ===== DM LEFT SECTION ===== */
+.dm-left-section {
+  padding: 8px 0;
+}
+
+.dm-left-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 16px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+}
+
+.dm-left-count {
+  background: var(--bg-surface);
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-size: 10px;
+}
+
+.dm-left-section .dm-item {
+  border-radius: 4px;
+  margin: 1px 4px;
+  cursor: pointer;
+}
+
+.dm-left-section .dm-item:hover {
+  background: var(--bg-modifier-hover);
+}
+
+.dm-left-section .dm-item.active {
+  background: var(--bg-modifier-hover);
+}
+
+/* ===== VOICE SETTINGS ===== */
+.voice-settings-content {
+  max-width: 640px !important;
+}
+
+.mic-test-area {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.mic-level-bar {
+  flex: 1;
+  height: 8px;
+  background: var(--bg-surface);
+  border-radius: 4px;
+  overflow: hidden;
+  min-width: 100px;
+}
+
+.mic-level-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-green), var(--accent-yellow), var(--accent-red));
+  border-radius: 4px;
+  transition: width 0.1s;
+}
+
+.settings-slider {
+  width: 100%;
+  height: 6px;
+  appearance: none;
+  background: var(--bg-surface);
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+}
+
+.settings-slider::-webkit-slider-thumb {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+
+.settings-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+
+.voice-start-call-btn {
+  background: linear-gradient(135deg, var(--accent-green), #1a854a) !important;
+  border: none !important;
+  color: #fff !important;
+  font-size: 15px !important;
+  padding: 12px !important;
+  margin-top: 24px !important;
+}
+
+.voice-start-call-btn:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(35,165,90,0.3);
+}
+
+.settings-btn.danger {
+  background: transparent;
+  border: 2px solid var(--red);
+  color: var(--red);
+}
+
+.settings-btn.danger:hover {
+  background: var(--red);
+  color: #fff;
+}
+
+/* ===== SERVER SETTINGS ===== */
+.settings-info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 14px;
+}
+
+.settings-info-value {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+/* ===== MODAL IMPROVEMENTS ===== */
+.modal-card {
+  max-width: 440px;
+}
+
+.modal-card h3 {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.modal-card p {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.modal-btn {
+  padding: 8px 20px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  transition: opacity 0.15s;
+}
+
+.modal-btn.cancel {
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+}
+
+.modal-btn.cancel:hover {
+  background: var(--bg-surface-hover);
+}
+
+.modal-btn.submit {
+  background: var(--accent);
+  color: #fff;
+}
+
+.modal-btn.submit:hover {
+  opacity: 0.9;
+}
+
+/* ===== CHAT UI IMPROVEMENTS ===== */
+.empty-state-icon {
+  font-size: 48px !important;
+  margin-bottom: 16px !important;
+}
+
+.chat-header-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  border-left: 1px solid var(--border-color);
+  padding-left: 8px;
+  margin-left: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 200px;
+}
+
+.send-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* ===== CALL CONTAINER IMPROVEMENTS ===== */
+.call-container {
+  background: linear-gradient(135deg, #1a1b2e 0%, #2d1b3d 50%, #1a1b2e 100%);
+}
+
+.call-control-btn {
+  width: 48px;
+  height: 48px;
+  font-size: 20px;
+  transition: all 0.15s;
+}
+
+.call-control-btn:hover {
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+
+.call-control-btn.muted {
+  background: var(--red) !important;
+  border-color: var(--red) !important;
+}
+
+.call-end-btn {
+  background: var(--red) !important;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  transition: all 0.15s;
+}
+
+.call-end-btn:hover {
+  opacity: 0.9;
+  transform: scale(1.05);
+}

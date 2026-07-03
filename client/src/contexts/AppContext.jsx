@@ -162,6 +162,16 @@ export function AppProvider({ children }) {
       dispatch({ type: "ADD_MESSAGE", chatKey: msg.chatKey || chatKey, payload: msg });
     });
 
+    socket.on("message:sent", (msg) => {
+      const chatKey = getActiveChatKey(stateRef.current);
+      const msgs = stateRef.current.messages[msg.chatKey || chatKey] || [];
+      const optIdx = msgs.findIndex(m => m.id.startsWith("opt_"));
+      if (optIdx >= 0) {
+        dispatch({ type: "REMOVE_MESSAGE", chatKey: msg.chatKey || chatKey, payload: msgs[optIdx].id });
+      }
+      dispatch({ type: "ADD_MESSAGE", chatKey: msg.chatKey || chatKey, payload: msg });
+    });
+
     socket.on("message:updated", (data) => {
       const chatKey = getActiveChatKey(stateRef.current);
       const msgs = stateRef.current.messages[chatKey] || [];
@@ -192,6 +202,7 @@ export function AppProvider({ children }) {
 
     return () => {
       socket.off("message:new");
+      socket.off("message:sent");
       socket.off("message:updated");
       socket.off("message:deleted");
       socket.off("typing:update");

@@ -71,9 +71,12 @@ export default function LoginPage() {
 
   return (
     <div className="login-page">
+      <div className="login-bg-decoration" />
       <div className="login-card">
         <div className="login-header">
-          <div className="login-logo">d</div>
+          <div className="login-logo-ring">
+            <div className="login-logo">D</div>
+          </div>
           <h1 className="login-title">Dangro</h1>
           <p className="login-subtitle">
             {tab === "login" ? "Welcome back! Sign in to continue." : "Create your account to get started."}
