@@ -14,7 +14,7 @@ function hashColor(str) {
   return AVATARS[Math.abs(hash) % AVATARS.length];
 }
 
-export default function LeftPanel({ onSettings, onCall, onServerSettings }) {
+export default function LeftPanel({ onSettings, onVoiceSettings, onServerSettings }) {
   const { state, dispatch, logout, addToast } = useApp();
   const [showServerModal, setShowServerModal] = useState(false);
   const [showChannelModal, setShowChannelModal] = useState(false);
@@ -281,7 +281,7 @@ export default function LeftPanel({ onSettings, onCall, onServerSettings }) {
             <div className="user-status-text">{state.customStatus || state.status}</div>
           </div>
           <div className="user-controls">
-            <button className="user-control-btn" onClick={onCall} title="Voice Settings">&#128266;</button>
+            <button className="user-control-btn" onClick={onVoiceSettings} title="Voice Settings">&#128266;</button>
             <button className="user-control-btn" onClick={onSettings} title="Settings">&#9881;</button>
             <button className="user-control-btn" onClick={logout} title="Log Out">&#128682;</button>
           </div>

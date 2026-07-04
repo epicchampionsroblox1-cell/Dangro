@@ -13,6 +13,29 @@ function hashColor(str) {
   return AVATARS[Math.abs(hash) % AVATARS.length];
 }
 
+function getSenderColor(sender, myMsgColor) {
+  const myName = localStorage.getItem("dangro_display_name") || "";
+  const myColor = localStorage.getItem("dangro_msg_color");
+  if (myColor && sender === myName) return myColor;
+
+  const saved = localStorage.getItem("dangro_user_colors_" + sender);
+  if (saved) return saved;
+
+  const baseColors = ["#5865f2", "#3ba55d", "#ed4245", "#f0b232", "#a855f7", "#22d3ee", "#eb459e", "#57f287", "#ff6b6b", "#ffa94d", "#ffd43b", "#69db7c", "#4dabf7", "#9775fa", "#f783ac", "#20c997"];
+  const idx = Math.abs(sender.split("").reduce((a, c) => a + c.charCodeAt(0), 0)) % baseColors.length;
+  const color = baseColors[idx];
+
+  const usedColors = JSON.parse(localStorage.getItem("dangro_used_colors") || "{}");
+  if (usedColors[color] && usedColors[color] !== sender) {
+    const newIdx = (baseColors.indexOf(color) + 1) % baseColors.length;
+    return baseColors[newIdx];
+  }
+  usedColors[color] = sender;
+  localStorage.setItem("dangro_used_colors", JSON.stringify(usedColors));
+  localStorage.setItem("dangro_user_colors_" + sender, color);
+  return color;
+}
+
 function formatTime(ts) {
   if (!ts) return "";
   try {
@@ -33,6 +56,7 @@ function formatTime(ts) {
 export default function MessageItem({ msg, onReply }) {
   const { state, addToast } = useApp();
   const isMe = msg.sender === state.displayName;
+  const senderColor = getSenderColor(msg.sender, state.msgColor);
   const [showReactionPicker, setShowReactionPicker] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editContent, setEditContent] = useState(msg.content || "");
@@ -105,12 +129,12 @@ export default function MessageItem({ msg, onReply }) {
 
   return (
     <div className="message" data-msg-id={msg.id}>
-      <div className="msg-avatar" style={{ backgroundColor: hashColor(msg.sender) }}>
+      <div className="msg-avatar" style={{ backgroundColor: senderColor }}>
         {msg.sender.charAt(0).toUpperCase()}
       </div>
       <div className="msg-body">
         <div className="msg-header">
-          <span className="msg-sender" style={{ color: hashColor(msg.sender) }}>{msg.sender}</span>
+          <span className="msg-sender" style={{ color: senderColor }}>{msg.sender}</span>
           <span className="msg-timestamp">{formatTime(msg.timestamp)}</span>
           {msg.editedAt && <span className="msg-timestamp msg-edited">(edited)</span>}
         </div>

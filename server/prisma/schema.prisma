@@ -94,6 +94,7 @@ model Message {
   seq             Int       @default(autoincrement())
   chatKey         String    @map("chat_key")
   sender          String
+  senderId        String?   @map("sender_id")
   content         String    @default("")
   timestamp       DateTime  @default(now())
   editedAt        DateTime? @map("edited_at")
