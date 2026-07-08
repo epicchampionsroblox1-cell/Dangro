@@ -178,6 +178,78 @@ export function registerChatHandlers(io, socket) {
     io.emit("presence:update", { userId, username, status });
   });
 
+  // WebRTC Call Signaling
+  socket.on("call:start", ({ targetId, channelName }) => {
+    const targetSockets = userSockets.get(targetId);
+    if (targetSockets) {
+      for (const s of targetSockets.values()) {
+        io.to(s.socketId).emit("call:incoming", {
+          from: userId,
+          username,
+          channelName,
+        });
+      }
+    }
+  });
+
+  socket.on("call:accept", ({ targetId }) => {
+    const targetSockets = userSockets.get(targetId);
+    if (targetSockets) {
+      for (const s of targetSockets.values()) {
+        io.to(s.socketId).emit("call:accepted", { from: userId, username });
+      }
+    }
+    // Notify all other participants
+    io.to(socket.data.chatKey || "global").emit("call:participant-joined", { username });
+  });
+
+  socket.on("call:decline", ({ targetId }) => {
+    const targetSockets = userSockets.get(targetId);
+    if (targetSockets) {
+      for (const s of targetSockets.values()) {
+        io.to(s.socketId).emit("call:declined", { from: userId, username });
+      }
+    }
+  });
+
+  socket.on("call:end", ({ targetId }) => {
+    const targetSockets = userSockets.get(targetId);
+    if (targetSockets) {
+      for (const s of targetSockets.values()) {
+        io.to(s.socketId).emit("call:ended", { from: userId, username });
+      }
+    }
+    io.to(socket.data.chatKey || "global").emit("call:participant-left", { username });
+  });
+
+  // WebRTC signaling relay
+  socket.on("call:offer", ({ offer, to }) => {
+    const targetSockets = userSockets.get(to);
+    if (targetSockets) {
+      for (const s of targetSockets.values()) {
+        io.to(s.socketId).emit("call:offer", { offer, from: userId });
+      }
+    }
+  });
+
+  socket.on("call:answer", ({ answer, to }) => {
+    const targetSockets = userSockets.get(to);
+    if (targetSockets) {
+      for (const s of targetSockets.values()) {
+        io.to(s.socketId).emit("call:answer", { answer });
+      }
+    }
+  });
+
+  socket.on("call:ice-candidate", ({ candidate, to }) => {
+    const targetSockets = userSockets.get(to);
+    if (targetSockets) {
+      for (const s of targetSockets.values()) {
+        io.to(s.socketId).emit("call:ice-candidate", { candidate });
+      }
+    }
+  });
+
   socket.on("disconnect", () => {
     const sockets = userSockets.get(userId);
     if (sockets) {

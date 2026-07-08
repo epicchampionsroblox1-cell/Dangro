@@ -177,7 +177,6 @@ export default function ChatPanel({ onStartCall }) {
           {info.desc && <span className="chat-header-desc">{info.desc}</span>}
         </div>
         <div className="chat-header-actions">
-          <button className="chat-header-btn chat-call-btn" onClick={onStartCall} title="Start Voice Call">&#128222;</button>
           <div className="chat-search">
             <input type="text" placeholder="Search" value={state.chatSearchQuery}
               onChange={e => dispatch({ type: "SET_CHAT_SEARCH", payload: e.target.value })} />
