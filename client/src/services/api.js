@@ -4,18 +4,30 @@ function getStorage() {
   return localStorage.getItem("dangro_remember") === "true" ? localStorage : sessionStorage;
 }
 
-let accessToken = getStorage().getItem("dangro_access_token");
-let refreshToken = getStorage().getItem("dangro_refresh_token");
+let accessToken = localStorage.getItem("dangro_access_token") || sessionStorage.getItem("dangro_access_token") || null;
+let refreshToken = localStorage.getItem("dangro_refresh_token") || sessionStorage.getItem("dangro_refresh_token") || null;
 let refreshPromise = null;
 
 export function setTokens(access, refresh) {
+  const storage = getStorage();
   accessToken = access;
   refreshToken = refresh;
-  const storage = getStorage();
-  if (access) storage.setItem("dangro_access_token", access);
-  else storage.removeItem("dangro_access_token");
-  if (refresh) storage.setItem("dangro_refresh_token", refresh);
-  else storage.removeItem("dangro_refresh_token");
+  if (access) {
+    storage.setItem("dangro_access_token", access);
+    const other = storage === localStorage ? sessionStorage : localStorage;
+    other.removeItem("dangro_access_token");
+  } else {
+    localStorage.removeItem("dangro_access_token");
+    sessionStorage.removeItem("dangro_access_token");
+  }
+  if (refresh) {
+    storage.setItem("dangro_refresh_token", refresh);
+    const other = storage === localStorage ? sessionStorage : localStorage;
+    other.removeItem("dangro_refresh_token");
+  } else {
+    localStorage.removeItem("dangro_refresh_token");
+    sessionStorage.removeItem("dangro_refresh_token");
+  }
 }
 
 export function setRememberMe(val) {
@@ -33,6 +45,10 @@ export function clearTokens() {
 }
 
 export function getAccessToken() {
+  if (!accessToken) {
+    accessToken = localStorage.getItem("dangro_access_token") || sessionStorage.getItem("dangro_access_token") || null;
+    refreshToken = localStorage.getItem("dangro_refresh_token") || sessionStorage.getItem("dangro_refresh_token") || null;
+  }
   return accessToken;
 }
 
