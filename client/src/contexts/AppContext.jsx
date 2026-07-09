@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useReducer, useCallback, useEffect, useRef } from "react";
 import { useLocalStorage } from "../hooks/useLocalStorage";
 import socket, { reconnectSocket } from "../services/socket";
-import { api, setTokens, clearTokens, getAccessToken } from "../services/api";
+import { api, setTokens, clearTokens, getAccessToken, setRememberMe } from "../services/api";
 
 const initialState = {
   user: null,
@@ -128,6 +128,13 @@ export function AppProvider({ children }) {
   }, [state]);
 
   useEffect(() => {
+    const savedTheme = localStorage.getItem("dangro_theme") || "dark";
+    const savedMsgColor = localStorage.getItem("dangro_msg_color") || "#5865f2";
+    if (savedTheme !== "dark") {
+      document.documentElement.setAttribute("data-theme", savedTheme);
+    }
+    dispatch({ type: "SET_PROFILE", payload: { msgColor: savedMsgColor } });
+
     const token = getAccessToken();
     if (token && !state.user) {
       api.auth.me().then(data => {
@@ -205,6 +212,7 @@ export function AppProvider({ children }) {
 
   const login = useCallback(async (username, password, rememberMe = false) => {
     const result = await api.auth.login(username, password, rememberMe);
+    setRememberMe(rememberMe);
     setTokens(result.accessToken, result.refreshToken);
     const u = result.user;
     dispatch({ type: "SET_USER", payload: { id: u.id, username: u.username, email: u.email } });

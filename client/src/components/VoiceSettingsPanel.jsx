@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useApp } from "../contexts/AppContext";
 
-export default function VoiceSettingsPanel({ onClose, onStartCall }) {
+export default function VoiceSettingsPanel({ onClose }) {
   const { addToast } = useApp();
   const [inputDevices, setInputDevices] = useState([]);
   const [outputDevices, setOutputDevices] = useState([]);
@@ -75,11 +75,6 @@ export default function VoiceSettingsPanel({ onClose, onStartCall }) {
     }
     setMicActive(false);
     setMicLevel(0);
-  }
-
-  function handleStartCall() {
-    stopMicTest();
-    onStartCall();
   }
 
   return (
@@ -159,9 +154,6 @@ export default function VoiceSettingsPanel({ onClose, onStartCall }) {
               </label>
             </div>
 
-            <button className="settings-btn settings-save-btn voice-start-call-btn" onClick={handleStartCall}>
-              &#128222; Start Call
-            </button>
           </div>
         </div>
       </div>

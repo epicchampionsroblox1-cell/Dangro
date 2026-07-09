@@ -11,42 +11,12 @@ function hashColor(str) {
   return AVATARS[Math.abs(hash) % AVATARS.length];
 }
 
-const MOCK_ACTIVITIES = {
-  playing: [
-    { game: "Elden Ring", icon: "⚔️" },
-    { game: "Minecraft", icon: "⛏️" },
-    { game: "Valorant", icon: "🔫" },
-    { game: "Hollow Knight", icon: "🪲" },
-  ],
-  listening: [
-    { song: "Blinding Lights - The Weeknd", icon: "🎵" },
-    { song: "Bohemian Rhapsody - Queen", icon: "🎸" },
-    { song: "Lose Yourself - Eminem", icon: "🎤" },
-    { song: "Stairway to Heaven - Led Zeppelin", icon: "🎶" },
-  ],
-};
-
 export default function FriendActivity({ onLinkAccount }) {
   const { state, dispatch } = useApp();
-  const [linkedAccounts, setLinkedAccounts] = useState(() => {
-    const saved = localStorage.getItem("dangro_linked_accounts");
-    return saved ? JSON.parse(saved) : {};
-  });
 
   const onlineFriends = state.friends.filter(
     f => f.status !== "offline" && f.status !== "pending_in" && f.status !== "pending_out"
   );
-
-  function getFriendActivity(friend) {
-    const friendHash = friend.username.length;
-    const activities = MOCK_ACTIVITIES;
-    const playing = activities.playing[friendHash % activities.playing.length];
-    const listening = activities.listening[friendHash % activities.listening.length];
-
-    const hasPlaying = linkedAccounts.spotify || friendHash % 3 !== 0;
-
-    return { playing, listening, hasPlaying };
-  }
 
   function openDM(friendId) {
     dispatch({
@@ -80,7 +50,6 @@ export default function FriendActivity({ onLinkAccount }) {
           </div>
         ) : (
           onlineFriends.map(friend => {
-            const activity = getFriendActivity(friend);
             const statusColor = friend.status === "online" ? "var(--green)" :
               friend.status === "idle" ? "var(--yellow)" :
               friend.status === "dnd" ? "var(--red)" : "var(--text-muted)";
@@ -98,15 +67,7 @@ export default function FriendActivity({ onLinkAccount }) {
                 <div className="fa-info">
                   <div className="fa-name">{friend.username}</div>
                   <div className="fa-activity">
-                    <span className="fa-activity-icon">{activity.playing.icon}</span>
-                    Playing {activity.playing.game}
-                    {activity.hasPlaying && (
-                      <>
-                        <span style={{ margin: "0 4px", color: "var(--text-muted)" }}>·</span>
-                        <span className="fa-activity-icon">{activity.listening.icon}</span>
-                        {activity.listening.song}
-                      </>
-                    )}
+                    {friend.customStatus || "Online"}
                   </div>
                 </div>
               </div>

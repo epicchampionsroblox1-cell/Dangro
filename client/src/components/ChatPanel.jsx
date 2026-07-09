@@ -7,7 +7,7 @@ import EmojiPicker from "./EmojiPicker";
 
 const ACCEPTED_TYPES = "image/*,video/mp4,video/webm,application/pdf,.txt,.zip,.rar";
 
-export default function ChatPanel({ onStartCall }) {
+export default function ChatPanel({ onStartCall, onStartVideoCall }) {
   const { state, dispatch, loadMessages, sendMessage, addToast } = useApp();
   const [input, setInput] = useState("");
   const [replyTarget, setReplyTarget] = useState(null);
@@ -177,6 +177,8 @@ export default function ChatPanel({ onStartCall }) {
           {info.desc && <span className="chat-header-desc">{info.desc}</span>}
         </div>
         <div className="chat-header-actions">
+          <button className="chat-header-btn" onClick={onStartCall} title="Voice Call">&#128222;</button>
+          <button className="chat-header-btn" onClick={onStartVideoCall || onStartCall} title="Video Call">&#128249;</button>
           <div className="chat-search">
             <input type="text" placeholder="Search" value={state.chatSearchQuery}
               onChange={e => dispatch({ type: "SET_CHAT_SEARCH", payload: e.target.value })} />

@@ -1,24 +1,14 @@
 import React, { useState } from "react";
 
-const DEFAULT_FAVOURITES = [
-  { name: "Elden Ring", icon: "⚔️", desc: "Action RPG" },
-  { name: "Minecraft", icon: "⛏️", desc: "Sandbox Survival" },
-];
-
-const DEFAULT_WISHLIST = [
-  { name: "GTA VI", icon: "🚗", desc: "Coming soon..." },
-  { name: "Silksong", icon: "🪲", desc: "Hollow Knight sequel" },
-];
-
 export default function GamingHub({ onStartMining }) {
   const [activeTab, setActiveTab] = useState("favourites");
   const [favourites, setFavourites] = useState(() => {
     const saved = localStorage.getItem("dangro_fav_games");
-    return saved ? JSON.parse(saved) : DEFAULT_FAVOURITES;
+    return saved ? JSON.parse(saved) : [];
   });
   const [wishlist, setWishlist] = useState(() => {
     const saved = localStorage.getItem("dangro_wishlist");
-    return saved ? JSON.parse(saved) : DEFAULT_WISHLIST;
+    return saved ? JSON.parse(saved) : [];
   });
   const [showAddGame, setShowAddGame] = useState(false);
   const [newGameName, setNewGameName] = useState("");

@@ -117,7 +117,10 @@ export default function MainPage() {
           </div>
         </div>
 
-        <ChatPanel onStartCall={() => { setVoiceSettingsOpen(false); setCallOpen(true); setCallTarget(null); }} />
+        <ChatPanel
+          onStartCall={() => { setVoiceSettingsOpen(false); setCallOpen(true); setCallTarget(null); }}
+          onStartVideoCall={() => { setVoiceSettingsOpen(false); setCallOpen(true); setCallTarget(null); }}
+        />
         <RightPanel />
       </div>
 
@@ -202,7 +205,6 @@ export default function MainPage() {
       {voiceSettingsOpen && (
         <VoiceSettingsPanel
           onClose={() => setVoiceSettingsOpen(false)}
-          onStartCall={() => { setVoiceSettingsOpen(false); setCallOpen(true); setCallTarget(null); }}
         />
       )}
       {callOpen && (
