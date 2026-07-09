@@ -178,6 +178,15 @@ export function registerChatHandlers(io, socket) {
     io.emit("presence:update", { userId, username, status });
   });
 
+  socket.on("call:chat", ({ targetId, sender, content }) => {
+    const targetSockets = userSockets.get(targetId);
+    if (targetSockets) {
+      for (const s of targetSockets.values()) {
+        io.to(s.socketId).emit("call:chat", { sender, content });
+      }
+    }
+  });
+
   // WebRTC Call Signaling
   socket.on("call:start", ({ targetId, channelName }) => {
     const targetSockets = userSockets.get(targetId);

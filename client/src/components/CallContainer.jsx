@@ -1,12 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useApp } from "../contexts/AppContext";
 import socket from "../services/socket";
-
 let peerConnection = null;
 let localStream = null;
 
 export default function CallContainer({ onClose, channelName, incomingFrom }) {
-  const { state, addToast } = useApp();
+  const { state, dispatch, addToast } = useApp();
   const [active, setActive] = useState(false);
   const [participants, setParticipants] = useState([]);
   const [timer, setTimer] = useState("00:00");
@@ -14,6 +13,8 @@ export default function CallContainer({ onClose, channelName, incomingFrom }) {
   const [deafened, setDeafened] = useState(false);
   const [videoOff, setVideoOff] = useState(true);
   const [screenSharing, setScreenSharing] = useState(false);
+  const [chatInput, setChatInput] = useState("");
+  const [showChat, setShowChat] = useState(false);
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
   const localStreamRef = useRef(null);
@@ -21,6 +22,18 @@ export default function CallContainer({ onClose, channelName, incomingFrom }) {
   const timerRef = useRef(null);
   const startTimeRef = useRef(null);
   const pendingIceRef = useRef([]);
+  const chatMessagesRef = useRef(null);
+
+  const [callTargetId] = useState(state.activeDmFriendId || state.activeServerId);
+  const callChatKey = "call_chat_" + (callTargetId || "channel");
+  const callMessages = state.messages[callChatKey] || [];
+
+  useEffect(() => {
+    socket.on("call:chat", (data) => {
+      addToast("Call chat: " + data.sender + ": " + data.content, "info");
+    });
+    return () => { socket.off("call:chat"); };
+  }, []);
 
   useEffect(() => {
     if (incomingFrom) {
@@ -39,6 +52,12 @@ export default function CallContainer({ onClose, channelName, incomingFrom }) {
       socket.off("call:participant-left");
     };
   }, []);
+
+  useEffect(() => {
+    if (chatMessagesRef.current) {
+      chatMessagesRef.current.scrollTop = chatMessagesRef.current.scrollHeight;
+    }
+  }, [callMessages.length]);
 
   function setupSocketListeners() {
     socket.on("call:offer", async ({ offer, from }) => {
@@ -120,11 +139,8 @@ export default function CallContainer({ onClose, channelName, incomingFrom }) {
       };
 
       peerConnection.onicecandidate = (event) => {
-        if (event.candidate) {
-          const targetId = state.activeDmFriendId;
-          if (targetId) {
-            socket.emit("call:ice-candidate", { candidate: event.candidate, to: targetId });
-          }
+        if (event.candidate && callTargetId) {
+          socket.emit("call:ice-candidate", { candidate: event.candidate, to: callTargetId });
         }
       };
 
@@ -138,9 +154,8 @@ export default function CallContainer({ onClose, channelName, incomingFrom }) {
       if (isInitiator) {
         const offer = await peerConnection.createOffer();
         await peerConnection.setLocalDescription(offer);
-        const targetId = state.activeDmFriendId;
-        if (targetId) {
-          socket.emit("call:offer", { offer, to: targetId });
+        if (callTargetId) {
+          socket.emit("call:offer", { offer, to: callTargetId });
         }
       }
 
@@ -159,8 +174,8 @@ export default function CallContainer({ onClose, channelName, incomingFrom }) {
       setActive(true);
       setParticipants([{ username: state.displayName, speaking: false }]);
 
-      if (state.activeDmFriendId) {
-        socket.emit("call:start", { targetId: state.activeDmFriendId, channelName });
+      if (callTargetId) {
+        socket.emit("call:start", { targetId: callTargetId, channelName });
         await createPeerConnection(true);
       }
 
@@ -194,8 +209,8 @@ export default function CallContainer({ onClose, channelName, incomingFrom }) {
     timerRef.current = null;
     startTimeRef.current = null;
 
-    if (state.activeDmFriendId) {
-      socket.emit("call:end", { targetId: state.activeDmFriendId });
+    if (callTargetId) {
+      socket.emit("call:end", { targetId: callTargetId });
     }
 
     addToast("Disconnected from voice channel", "info");
@@ -285,6 +300,24 @@ export default function CallContainer({ onClose, channelName, incomingFrom }) {
     }
   }
 
+  function sendCallChat() {
+    const content = chatInput.trim();
+    if (!content) return;
+    const msg = {
+      id: "call_msg_" + Date.now(),
+      sender: state.displayName,
+      content,
+      timestamp: new Date().toISOString(),
+      system: false,
+    };
+    const currentMsgs = state.messages[callChatKey] || [];
+    dispatch({ type: "SET_MESSAGES", chatKey: callChatKey, payload: [...currentMsgs, msg] });
+    socket.emit("call:chat", { targetId: callTargetId, sender: state.displayName, content });
+    setChatInput("");
+  }
+
+
+
   return (
     <div className="call-container">
       <div className="call-header">
@@ -296,38 +329,70 @@ export default function CallContainer({ onClose, channelName, incomingFrom }) {
         <div className="call-timer">{timer}</div>
         <div className="call-header-right">
           <span className="call-participant-count">{participants.length} participant{participants.length !== 1 ? "s" : ""}</span>
-          <button className="call-end-btn" onClick={stopCall}>Disconnect</button>
         </div>
       </div>
 
-      <div className="call-grid" style={{ display: videoOff && !screenSharing ? "none" : "grid" }}>
-        {!videoOff && (
-          <div className="call-video-container">
-            <video ref={localVideoRef} autoPlay muted playsInline style={{ transform: "scaleX(-1)" }}></video>
-            <div className="call-video-label">{state.displayName} (you)</div>
+      <div className="call-body">
+        <div className={"call-main" + (showChat ? " call-main-split" : "")}>
+          <div className="call-grid" style={{ display: videoOff && !screenSharing ? "none" : "grid" }}>
+            {!videoOff && (
+              <div className="call-video-container">
+                <video ref={localVideoRef} autoPlay muted playsInline style={{ transform: "scaleX(-1)" }}></video>
+                <div className="call-video-label">{state.displayName} (you)</div>
+              </div>
+            )}
+            {!videoOff && (
+              <div className="call-video-container">
+                <video ref={remoteVideoRef} autoPlay playsInline></video>
+                <div className="call-video-label">
+                  {participants.find(p => p.username !== state.displayName)?.username || "Remote"}
+                </div>
+              </div>
+            )}
           </div>
-        )}
-        {!videoOff && (
-          <div className="call-video-container">
-            <video ref={remoteVideoRef} autoPlay playsInline></video>
-            <div className="call-video-label">
-              {participants.find(p => p.username !== state.displayName)?.username || "Remote"}
-            </div>
-          </div>
-        )}
-      </div>
 
-      <div className="call-voice-participants">
-        {participants.map((p, i) => (
-          <div key={i} className={"call-voice-user" + (p.speaking ? " speaking" : "")}>
-            <div className="call-voice-avatar">{p.username.charAt(0).toUpperCase()}</div>
-            <div className="call-voice-name">{p.username}</div>
-            <div className="call-voice-indicator">
-              <span className={"voice-status-dot" + (p.username === state.displayName ? (micMuted ? " muted" : " live") : " live")} />
-              {p.username === state.displayName && (micMuted ? "Muted" : (deafened ? "Deafened" : "Live"))}
+          <div className="call-voice-participants" style={{ display: videoOff && !screenSharing ? "flex" : "none" }}>
+            {participants.map((p, i) => (
+              <div key={i} className={"call-voice-user" + (p.speaking ? " speaking" : "")}>
+                <div className="call-voice-avatar">{p.username.charAt(0).toUpperCase()}</div>
+                <div className="call-voice-name">{p.username}</div>
+                <div className="call-voice-indicator">
+                  <span className={"voice-status-dot" + (p.username === state.displayName ? (micMuted ? " muted" : " live") : " live")} />
+                  {p.username === state.displayName && (micMuted ? "Muted" : (deafened ? "Deafened" : "Live"))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {showChat && (
+          <div className="call-chat">
+            <div className="call-chat-header">In-Call Chat</div>
+            <div className="call-chat-messages" ref={chatMessagesRef}>
+              {callMessages.length === 0 ? (
+                <div className="empty-state" style={{ padding: "16px" }}>
+                  <div className="empty-state-title" style={{ fontSize: 12 }}>No messages in call</div>
+                </div>
+              ) : (
+                callMessages.map(msg => (
+                  <div key={msg.id} className="call-chat-msg">
+                    <span className="call-chat-sender">{msg.sender}</span>
+                    <span className="call-chat-text">{msg.content}</span>
+                  </div>
+                ))
+              )}
+            </div>
+            <div className="call-chat-input">
+              <input
+                type="text" placeholder="Chat in call..."
+                value={chatInput}
+                onChange={e => setChatInput(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendCallChat(); } }}
+              />
+              <button onClick={sendCallChat} disabled={!chatInput.trim()}>Send</button>
             </div>
           </div>
-        ))}
+        )}
       </div>
 
       <div className="call-controls">
@@ -345,6 +410,9 @@ export default function CallContainer({ onClose, channelName, incomingFrom }) {
           </button>
           <button className={"call-control-btn" + (screenSharing ? " active" : "")} title={screenSharing ? "Stop Sharing" : "Share Screen"} onClick={toggleScreenShare}>
             {"🖥"}
+          </button>
+          <button className={"call-control-btn" + (showChat ? " active" : "")} title={showChat ? "Hide Chat" : "Show Chat"} onClick={() => setShowChat(!showChat)}>
+            💬
           </button>
         </div>
         <div className="call-controls-right">

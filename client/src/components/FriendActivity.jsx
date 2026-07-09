@@ -1,5 +1,6 @@
-import React, { useState } from "react";
+import React from "react";
 import { useApp } from "../contexts/AppContext";
+import { api } from "../services/api";
 
 const AVATARS = ["#7c3aed", "#10b981", "#ef4444", "#f59e0b", "#ec4899", "#3b82f6", "#14b8a6", "#f97316"];
 
@@ -11,65 +12,76 @@ function hashColor(str) {
   return AVATARS[Math.abs(hash) % AVATARS.length];
 }
 
-export default function FriendActivity({ onLinkAccount }) {
-  const { state, dispatch } = useApp();
+export default function FriendActivity() {
+  const { state, dispatch, addToast } = useApp();
 
-  const onlineFriends = state.friends.filter(
-    f => f.status !== "offline" && f.status !== "pending_in" && f.status !== "pending_out"
+  const friends = state.friends.filter(
+    f => f.status !== "pending_in" && f.status !== "pending_out"
   );
 
-  function openDM(friendId) {
+  const query = state.friendSearchQuery.trim().toLowerCase();
+  const visible = query
+    ? friends.filter(f => f.username.toLowerCase().includes(query))
+    : friends;
+
+  async function openDM(friendId) {
     dispatch({
       type: "SET_ACTIVE_CHAT",
       payload: { activeChatType: "dm", activeDmFriendId: friendId, activeNavTab: "dms" },
     });
-    const key = "dm_" + friendId;
-    if (!state.messages[key]) {
-      dispatch({
-        type: "SET_MESSAGES",
-        chatKey: key,
-        payload: [{ id: "sys_dm_" + Date.now(), sender: "System", content: "Private messages with this user.", timestamp: "Just now", system: true, reactions: {}, replyTo: null }],
-      });
-    }
+  }
+
+  async function removeFriend(friendId, username) {
+    if (!window.confirm("Remove @" + username + "?")) return;
+    try {
+      await api.friends.remove(friendId);
+      dispatch({ type: "SET_FRIENDS", payload: state.friends.filter(f => f.id !== friendId) });
+      addToast("Removed @" + username, "info");
+      if (state.activeChatType === "dm" && state.activeDmFriendId === friendId) {
+        dispatch({
+          type: "SET_ACTIVE_CHAT",
+          payload: { activeChatType: null, activeDmFriendId: null, activeServerId: null, activeChannelId: null },
+        });
+      }
+    } catch {}
   }
 
   return (
     <div className="friend-activity">
       <div className="fa-header">
-        <span>Friends Activity</span>
-        <div className="fa-header-actions">
-          <button className="fa-header-btn" onClick={onLinkAccount} title="Link Account">🔗</button>
-        </div>
+        <span>Friends</span>
+        <span className="fa-count">{friends.length} total</span>
+      </div>
+      <div className="hub-search">
+        <input type="text" placeholder="Search friends..." value={state.friendSearchQuery}
+          onChange={e => dispatch({ type: "SET_FRIEND_SEARCH", payload: e.target.value })} />
       </div>
       <div className="fa-list">
-        {onlineFriends.length === 0 ? (
+        {visible.length === 0 ? (
           <div className="empty-state" style={{ padding: "24px 16px" }}>
             <div className="empty-state-icon" style={{ fontSize: 32 }}>👥</div>
-            <div className="empty-state-title" style={{ fontSize: 14 }}>No friends online</div>
-            <div className="empty-state-desc" style={{ fontSize: 12 }}>Add friends to see their activity!</div>
+            <div className="empty-state-title" style={{ fontSize: 14 }}>
+              {query ? "No friends match your search" : "No friends yet"}
+            </div>
+            <div className="empty-state-desc" style={{ fontSize: 12 }}>Add friends using their username to start chatting!</div>
           </div>
         ) : (
-          onlineFriends.map(friend => {
+          visible.map(friend => {
             const statusColor = friend.status === "online" ? "var(--green)" :
               friend.status === "idle" ? "var(--yellow)" :
               friend.status === "dnd" ? "var(--red)" : "var(--text-muted)";
 
             return (
-              <div
-                key={friend.id}
-                className="fa-item"
-                onClick={() => openDM(friend.id)}
-              >
-                <div className="fa-avatar" style={{ backgroundColor: hashColor(friend.username) }}>
+              <div key={friend.id} className="fa-item">
+                <div className="fa-avatar" style={{ backgroundColor: hashColor(friend.username) }} onClick={() => openDM(friend.id)}>
                   {friend.username.charAt(0).toUpperCase()}
                   <span className="fa-status" style={{ background: statusColor }} />
                 </div>
-                <div className="fa-info">
+                <div className="fa-info" onClick={() => openDM(friend.id)}>
                   <div className="fa-name">{friend.username}</div>
-                  <div className="fa-activity">
-                    {friend.customStatus || "Online"}
-                  </div>
+                  <div className="fa-activity">{friend.customStatus || friend.status}</div>
                 </div>
+                <button className="fa-remove-btn" onClick={() => removeFriend(friend.id, friend.username)} title="Remove Friend">✕</button>
               </div>
             );
           })
