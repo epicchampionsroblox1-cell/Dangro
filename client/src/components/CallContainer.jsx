@@ -4,7 +4,7 @@ import socket from "../services/socket";
 let peerConnection = null;
 let localStream = null;
 
-export default function CallContainer({ onClose, channelName, incomingFrom }) {
+export default function CallContainer({ onClose, channelName, incomingFrom, callerId }) {
   const { state, dispatch, addToast } = useApp();
   const [active, setActive] = useState(false);
   const [participants, setParticipants] = useState([]);
@@ -24,7 +24,7 @@ export default function CallContainer({ onClose, channelName, incomingFrom }) {
   const pendingIceRef = useRef([]);
   const chatMessagesRef = useRef(null);
 
-  const [callTargetId] = useState(state.activeDmFriendId || state.activeServerId);
+  const [callTargetId] = useState(callerId || state.activeDmFriendId || state.activeServerId);
   const callChatKey = "call_chat_" + (callTargetId || "channel");
   const callMessages = state.messages[callChatKey] || [];
 
@@ -39,6 +39,20 @@ export default function CallContainer({ onClose, channelName, incomingFrom }) {
     if (incomingFrom) {
       setParticipants([{ username: incomingFrom, speaking: false }]);
       setActive(true);
+      startTimeRef.current = Date.now();
+      timerRef.current = setInterval(() => {
+        if (!startTimeRef.current) return;
+        const elapsed = Math.floor((Date.now() - startTimeRef.current) / 1000);
+        const mins = Math.floor(elapsed / 60).toString().padStart(2, "0");
+        const secs = (elapsed % 60).toString().padStart(2, "0");
+        setTimer(mins + ":" + secs);
+      }, 1000);
+      navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+        localStreamRef.current = stream;
+        localStream = stream;
+      }).catch(err => {
+        addToast("Could not access mic: " + err.message, "error");
+      });
     } else {
       startCall();
     }

@@ -33,9 +33,29 @@ const io = new Server(httpServer, {
 });
 
 app.use(helmet({
-  contentSecurityPolicy: false,
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com"],
+      imgSrc: ["'self'", "data:", "blob:", "https:"],
+      mediaSrc: ["'self'", "blob:", "https:"],
+      connectSrc: ["'self'", "wss:", "ws:", "https:"],
+      frameSrc: ["'none'"],
+      objectSrc: ["'none'"],
+    },
+  },
   crossOriginEmbedderPolicy: false,
+  hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
+  frameguard: { action: "deny" },
+  noSniff: true,
+  referrerPolicy: { policy: "strict-origin-when-cross-origin" },
 }));
+app.use((req, res, next) => {
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(self), geolocation=(), payment=()");
+  next();
+});
 app.use(cors({ origin: CORS_ORIGINS, credentials: true }));
 app.use(express.json({ limit: "10mb" }));
 
@@ -59,11 +79,21 @@ const limiter = rateLimit({
 });
 app.use("/api/auth", limiter);
 
-app.use("/uploads", express.static(UPLOAD_DIR));
+app.use("/uploads", express.static(UPLOAD_DIR, { maxAge: "7d", immutable: true }));
 
 const publicDir = path.join(__dirname, "../public");
 if (process.env.NODE_ENV === "production" && fs.existsSync(publicDir)) {
-  app.use(express.static(publicDir));
+  app.use(express.static(publicDir, {
+    maxAge: "1d",
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith("robots.txt") || filePath.endsWith("sitemap.xml")) {
+        res.setHeader("Cache-Control", "public, max-age=86400");
+        res.setHeader("Content-Type", filePath.endsWith("robots.txt") ? "text/plain" : "application/xml");
+      } else if (filePath.match(/\.(js|css)$/)) {
+        res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+      }
+    },
+  }));
 }
 
 app.get("/api/health", (req, res) => {
@@ -77,6 +107,10 @@ app.use("/api/messages", authenticateToken, messagesRouter);
 app.use("/api/friends", authenticateToken, friendsRouter);
 app.use("/api/friend-groups", authenticateToken, friendGroupsRouter);
 app.use("/api/upload", uploadRouter);
+
+app.use("/api/*", (req, res) => {
+  res.status(404).json({ error: `API route ${req.method} ${req.originalUrl} not found` });
+});
 
 app.use((req, res) => {
   if (process.env.NODE_ENV === "production" && fs.existsSync(publicDir)) {

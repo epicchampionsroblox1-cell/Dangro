@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useApp, getActiveChatKey } from "../contexts/AppContext";
 import socket from "../services/socket";
 import { api } from "../services/api";
@@ -24,9 +24,9 @@ export default function ChatPanel({ onStartCall, mobileChat, onMobileBack, onSet
   const chatKey = getActiveChatKey(state);
   const messages = state.messages[chatKey] || [];
   const query = state.chatSearchQuery.trim().toLowerCase();
-  const filtered = query
+  const filtered = useMemo(() => query
     ? messages.filter(m => m.content?.toLowerCase().includes(query) || m.sender?.toLowerCase().includes(query))
-    : messages;
+    : messages, [messages, query]);
 
   const hasMore = state.messageCursors[chatKey]?.hasMore;
   const typingData = state.typingUsers[chatKey];

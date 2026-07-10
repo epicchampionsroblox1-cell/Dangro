@@ -15,5 +15,14 @@ export default defineConfig({
   },
   build: {
     outDir: "dist",
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          "react-vendor": ["react", "react-dom"],
+          "socket-vendor": ["socket.io-client"],
+        },
+      },
+    },
+    chunkSizeWarningLimit: 1000,
   },
 });

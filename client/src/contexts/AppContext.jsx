@@ -141,9 +141,9 @@ export function AppProvider({ children }) {
   }, [state]);
 
   useEffect(() => {
-    const savedTheme = localStorage.getItem("dangro_theme") || "dark";
+    const savedTheme = localStorage.getItem("dangro_theme") || "oled";
     const savedMsgColor = localStorage.getItem("dangro_msg_color") || "#ffffff";
-    if (savedTheme !== "dark") {
+    if (savedTheme !== "oled") {
       document.documentElement.setAttribute("data-theme", savedTheme);
     }
     dispatch({ type: "SET_PROFILE", payload: { msgColor: savedMsgColor } });

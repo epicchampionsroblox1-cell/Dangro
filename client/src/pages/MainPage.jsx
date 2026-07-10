@@ -40,6 +40,7 @@ export default function MainPage() {
   const [miningOpen, setMiningOpen] = React.useState(false);
   const [showLinkAccount, setShowLinkAccount] = React.useState(false);
   const [incomingCall, setIncomingCall] = React.useState(null);
+  const [incomingCallerId, setIncomingCallerId] = React.useState(null);
   const [showServerModal, setShowServerModal] = React.useState(false);
   const [showJoinModal, setShowJoinModal] = React.useState(false);
   const [showChannelModal, setShowChannelModal] = React.useState(false);
@@ -69,7 +70,7 @@ export default function MainPage() {
   function acceptIncomingCall() {
     if (!incomingCall) return;
     socket.emit("call:accept", { targetId: incomingCall.from });
-    setCallTarget({ incomingFrom: incomingCall.username, channelName: incomingCall.channelName });
+    setCallTarget({ incomingFrom: incomingCall.username, channelName: incomingCall.channelName, callerId: incomingCall.from });
     setCallOpen(true);
     setIncomingCall(null);
   }
@@ -180,7 +181,7 @@ export default function MainPage() {
 
   return (
     <>
-      <div className="app-wrapper">
+      <main className="app-wrapper">
         {/* TOP BAR - Server bar */}
         <div className="top-bar">
           <div className="top-bar-logo" onClick={() => dispatch({ type: "SET_ACTIVE_CHAT", payload: { activeNavTab: "friends", activeServerId: null, activeChatType: null, activeChannelId: null, activeDmFriendId: null } })}>
@@ -382,7 +383,7 @@ export default function MainPage() {
             <button className="bottom-bar-btn" onClick={logout} title="Log Out">&#128682;</button>
           </div>
         </div>
-      </div>
+      </main>
 
       {/* IMAGE POPUP */}
       {state.imagePopup && (
@@ -450,6 +451,7 @@ export default function MainPage() {
           onClose={() => { setCallOpen(false); setCallTarget(null); }}
           channelName={getCallChannel()}
           incomingFrom={callTarget?.incomingFrom || null}
+          callerId={callTarget?.callerId || null}
         />
       )}
       {miningOpen && <MiningGame onClose={() => setMiningOpen(false)} />}
