@@ -7,7 +7,7 @@ import EmojiPicker from "./EmojiPicker";
 
 const ACCEPTED_TYPES = "image/*,video/mp4,video/webm,application/pdf,.txt,.zip,.rar";
 
-export default function ChatPanel({ onStartCall, mobileChat, onMobileBack, onSettings }) {
+const ChatPanel = React.memo(function ChatPanel({ onStartCall, mobileChat, onMobileBack, onSettings }) {
   const { state, dispatch, loadMessages, sendMessage, addToast } = useApp();
   const [input, setInput] = useState("");
   const [replyTarget, setReplyTarget] = useState(null);
@@ -300,4 +300,6 @@ export default function ChatPanel({ onStartCall, mobileChat, onMobileBack, onSet
       )}
     </div>
   );
-}
+});
+
+export default ChatPanel;

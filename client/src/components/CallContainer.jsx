@@ -15,6 +15,8 @@ export default function CallContainer({ onClose, channelName, incomingFrom, call
   const [screenSharing, setScreenSharing] = useState(false);
   const [chatInput, setChatInput] = useState("");
   const [showChat, setShowChat] = useState(false);
+  const [volume, setVolume] = useState(100);
+  const [micVolume, setMicVolume] = useState(100);
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
   const localStreamRef = useRef(null);
@@ -409,6 +411,28 @@ export default function CallContainer({ onClose, channelName, incomingFrom, call
         )}
       </div>
 
+      <div className="call-volume-row">
+        <span>Output</span>
+        <input type="range" min="0" max="100" value={volume} onChange={e => {
+          const v = Number(e.target.value);
+          setVolume(v);
+          if (remoteVideoRef.current) remoteVideoRef.current.volume = v / 100;
+        }} />
+        <span style={{ width: 30, textAlign: "right" }}>{volume}%</span>
+      </div>
+      <div className="call-volume-row">
+        <span>Input</span>
+        <input type="range" min="0" max="100" value={micVolume} onChange={e => {
+          const v = Number(e.target.value);
+          setMicVolume(v);
+          if (localStreamRef.current) {
+            localStreamRef.current.getAudioTracks().forEach(t => {
+              try { t.applyConstraints({ volume: v / 100 }); } catch {}
+            });
+          }
+        }} />
+        <span style={{ width: 30, textAlign: "right" }}>{micVolume}%</span>
+      </div>
       <div className="call-controls">
         <div className="call-controls-left">
           <button className={"call-control-btn" + (micMuted ? " danger" : "")} title={micMuted ? "Unmute Mic" : "Mute Mic"} onClick={toggleMic}>

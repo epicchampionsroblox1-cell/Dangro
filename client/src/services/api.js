@@ -176,6 +176,11 @@ export const api = {
     remove: (id) => request(`/servers/${id}`, { method: "DELETE" }),
     join: (code) => request(`/servers/join/${code}`, { method: "POST" }),
     leave: (id) => request(`/servers/${id}/leave`, { method: "POST" }),
+    kick: (id, targetUserId) => request(`/servers/${id}/kick`, { method: "POST", body: JSON.stringify({ targetUserId }) }),
+    ban: (id, targetUserId) => request(`/servers/${id}/ban`, { method: "POST", body: JSON.stringify({ targetUserId }) }),
+    unban: (id, targetUserId) => request(`/servers/${id}/unban`, { method: "POST", body: JSON.stringify({ targetUserId }) }),
+    setCoOwner: (id, targetUserId) => request(`/servers/${id}/set-coowner`, { method: "POST", body: JSON.stringify({ targetUserId }) }),
+    removeCoOwner: (id, targetUserId) => request(`/servers/${id}/remove-coowner`, { method: "POST", body: JSON.stringify({ targetUserId }) }),
   },
   channels: {
     create: (serverId, name, type) => request("/channels", { method: "POST", body: JSON.stringify({ serverId, name, type }) }),
