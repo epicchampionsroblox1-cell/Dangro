@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useApp } from "../contexts/AppContext";
 import { api } from "../services/api";
+import socket from "../services/socket";
 
 const SETTINGS_TABS = [
   { id: "profile", label: "Profile", icon: "\uD83D\uDC64" },
@@ -36,13 +37,15 @@ export default function SettingsPanel({ onClose }) {
   const [tab, setTab] = useState("profile");
   const [displayName, setDisplayName] = useState(state.displayName);
   const [bio, setBio] = useState(state.bio);
+  const [profilePic, setProfilePic] = useState(state.profilePic);
   const [status, setStatus] = useState(state.status);
   const [customStatus, setCustomStatus] = useState(state.customStatus);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [theme, setTheme] = useState("dark");
-  const [msgColor, setMsgColor] = useState(state.msgColor || "#5865f2");
+  const [banner, setBanner] = useState(state.banner || "");
+  const [msgColor, setMsgColor] = useState(state.msgColor || "#ffffff");
   const [notifyMessages, setNotifyMessages] = useState(true);
   const [notifyFriends, setNotifyFriends] = useState(true);
   const [notifySounds, setNotifySounds] = useState(true);
@@ -63,9 +66,18 @@ export default function SettingsPanel({ onClose }) {
   }, []);
 
   useEffect(() => {
-    const saved = localStorage.getItem("dangro_msg_color") || "#5865f2";
+    const saved = localStorage.getItem("dangro_msg_color") || "#ffffff";
     setMsgColor(saved);
   }, []);
+
+  async function handleBannerUpload(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const result = await api.upload.file(file);
+      setBanner(result.url);
+    } catch { addToast("Upload failed", "error"); }
+  }
 
   function applyTheme(themeId) {
     const t = THEMES.find(th => th.id === themeId);
@@ -83,21 +95,24 @@ export default function SettingsPanel({ onClose }) {
     }
   }
 
-  function handleFileUpload(e) {
+  async function handleFileUpload(e) {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      dispatch({ type: "SET_PROFILE", payload: { profilePic: event.target.result } });
-    };
-    reader.readAsDataURL(file);
+    try {
+      const result = await api.upload.file(file);
+      setProfilePic(result.url);
+    } catch { addToast("Upload failed", "error"); }
   }
 
   async function saveProfile() {
     try {
+      const bannerVal = banner.trim() || state.banner;
+      const picVal = profilePic || state.profilePic;
       await api.auth.updateProfile({
         displayName: displayName.trim() || state.displayName,
         bio: bio.trim(),
+        banner: bannerVal,
+        profilePic: picVal,
         status,
         customStatus: customStatus.trim(),
         theme,
@@ -107,10 +122,13 @@ export default function SettingsPanel({ onClose }) {
         payload: {
           displayName: displayName.trim() || state.displayName,
           bio: bio.trim(),
+          banner: bannerVal,
+          profilePic: picVal,
           status,
           customStatus: customStatus.trim(),
         },
       });
+      socket.emit("profile:updated", { profilePic: picVal, banner: bannerVal });
       addToast("Settings saved!", "success");
     } catch (e) {
       addToast(e.message || "Failed to save settings", "error");
@@ -179,10 +197,10 @@ export default function SettingsPanel({ onClose }) {
                 <h3>Profile</h3>
                 <div className="settings-profile-pic">
                   <div className="settings-avatar" style={{
-                    backgroundImage: state.profilePic ? `url(${state.profilePic})` : undefined,
-                    backgroundSize: state.profilePic ? "cover" : undefined,
+                    backgroundImage: profilePic ? `url(${profilePic})` : undefined,
+                    backgroundSize: profilePic ? "cover" : undefined,
                   }}>
-                    {!state.profilePic && (state.displayName.charAt(0).toUpperCase() || "U")}
+                    {!profilePic && (state.displayName.charAt(0).toUpperCase() || "U")}
                   </div>
                   <button className="settings-btn" onClick={() => fileInputRef.current?.click()}>Upload Photo</button>
                   <input type="file" ref={fileInputRef} accept="image/*" className="hidden" onChange={handleFileUpload} />
@@ -190,6 +208,11 @@ export default function SettingsPanel({ onClose }) {
                 <div className="settings-field">
                   <label>Display Name</label>
                   <input type="text" className="settings-input" value={displayName} onChange={e => setDisplayName(e.target.value)} />
+                </div>
+                <div className="settings-field">
+                  <label>Banner Image</label>
+                  <button className="settings-btn" onClick={() => { const el = document.createElement("input"); el.type = "file"; el.accept = "image/*"; el.onchange = handleBannerUpload; el.click(); }}>Upload Banner</button>
+                  {banner && <div style={{ marginTop: 8, width: "100%", height: 80, borderRadius: "var(--radius-sm)", background: `url(${banner}) center/cover`, border: "1px solid var(--border-color)" }} />}
                 </div>
                 <div className="settings-field">
                   <label>Bio</label>

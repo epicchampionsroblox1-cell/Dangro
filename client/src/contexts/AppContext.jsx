@@ -7,6 +7,7 @@ const initialState = {
   user: null,
   servers: [],
   friends: [],
+  friendGroups: [],
   groupChats: [],
   messages: {},
   messageCursors: {},
@@ -19,16 +20,20 @@ const initialState = {
   activeFriendSubtab: "all",
   displayName: "You",
   bio: "",
+  banner: "",
   status: "online",
   customStatus: "",
   profilePic: "",
   friendSearchQuery: "",
   chatSearchQuery: "",
-  msgColor: "#5865f2",
+  msgColor: "#ffffff",
   toasts: [],
   rememberMe: false,
   uploadProgress: null,
   typingUsers: {},
+  profileModalUser: null,
+  imagePopup: null,
+  lastReadTimestamps: {},
 };
 
 function reducer(state, action) {
@@ -94,6 +99,14 @@ function reducer(state, action) {
       return { ...state, friendSearchQuery: action.payload };
     case "SET_CHAT_SEARCH":
       return { ...state, chatSearchQuery: action.payload };
+    case "SET_FRIEND_GROUPS":
+      return { ...state, friendGroups: action.payload };
+    case "SET_PROFILE_MODAL":
+      return { ...state, profileModalUser: action.payload };
+    case "SET_IMAGE_POPUP":
+      return { ...state, imagePopup: action.payload };
+    case "SET_LAST_READ":
+      return { ...state, lastReadTimestamps: { ...state.lastReadTimestamps, [action.chatKey]: action.payload } };
     case "SET_TYPING":
       return {
         ...state,
@@ -129,7 +142,7 @@ export function AppProvider({ children }) {
 
   useEffect(() => {
     const savedTheme = localStorage.getItem("dangro_theme") || "dark";
-    const savedMsgColor = localStorage.getItem("dangro_msg_color") || "#5865f2";
+    const savedMsgColor = localStorage.getItem("dangro_msg_color") || "#ffffff";
     if (savedTheme !== "dark") {
       document.documentElement.setAttribute("data-theme", savedTheme);
     }
@@ -143,6 +156,7 @@ export function AppProvider({ children }) {
         dispatch({ type: "SET_PROFILE", payload: {
           displayName: u.displayName || u.username,
           bio: u.bio || "",
+          banner: u.banner || "",
           status: u.status || "online",
           customStatus: u.customStatus || "",
           profilePic: u.profilePic || "",
@@ -157,6 +171,7 @@ export function AppProvider({ children }) {
     if (state.user) {
       api.servers.list().then(servers => dispatch({ type: "SET_SERVERS", payload: servers })).catch(() => {});
       api.friends.list().then(friends => dispatch({ type: "SET_FRIENDS", payload: friends })).catch(() => {});
+      api.friendGroups.list().then(groups => dispatch({ type: "SET_FRIEND_GROUPS", payload: groups })).catch(() => {});
       reconnectSocket();
       socket.connect();
       return () => { socket.disconnect(); };
@@ -200,6 +215,14 @@ export function AppProvider({ children }) {
       )});
     });
 
+    socket.on("profile:updated", (data) => {
+      if (data.userId === stateRef.current.user?.id) return;
+      const friends = stateRef.current.friends.map(f =>
+        f.userId === data.userId ? { ...f, ...data } : f
+      );
+      dispatch({ type: "SET_FRIENDS", payload: friends });
+    });
+
     return () => {
       socket.off("message:new");
       socket.off("message:sent");
@@ -219,6 +242,7 @@ export function AppProvider({ children }) {
     dispatch({ type: "SET_PROFILE", payload: {
       displayName: u.displayName || u.username,
       bio: u.bio || "",
+      banner: u.banner || "",
       status: u.status || "online",
       customStatus: u.customStatus || "",
       profilePic: u.profilePic || "",

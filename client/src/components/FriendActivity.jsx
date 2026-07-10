@@ -2,7 +2,7 @@ import React from "react";
 import { useApp } from "../contexts/AppContext";
 import { api } from "../services/api";
 
-const AVATARS = ["#7c3aed", "#10b981", "#ef4444", "#f59e0b", "#ec4899", "#3b82f6", "#14b8a6", "#f97316"];
+const AVATARS = ["#007aff", "#34c759", "#ff3b30", "#ffcc00", "#af52de", "#ff9500", "#5ac8fa", "#ff2d55"];
 
 function hashColor(str) {
   let hash = 0;
@@ -67,15 +67,19 @@ export default function FriendActivity() {
           </div>
         ) : (
           visible.map(friend => {
-            const statusColor = friend.status === "online" ? "var(--green)" :
-              friend.status === "idle" ? "var(--yellow)" :
-              friend.status === "dnd" ? "var(--red)" : "var(--text-muted)";
+            const sc = friend.status === "online" ? "online" :
+              friend.status === "dnd" ? "dnd" :
+              friend.status === "idle" ? "idle" : "offline";
 
             return (
               <div key={friend.id} className="fa-item">
                 <div className="fa-avatar" style={{ backgroundColor: hashColor(friend.username) }} onClick={() => openDM(friend.id)}>
-                  {friend.username.charAt(0).toUpperCase()}
-                  <span className="fa-status" style={{ background: statusColor }} />
+                  {friend.profilePic ? (
+                    <img src={friend.profilePic} alt="" style={{ width: "100%", height: "100%", borderRadius: "50%", objectFit: "cover" }} />
+                  ) : (
+                    friend.username.charAt(0).toUpperCase()
+                  )}
+                  <span className={"status-ring " + sc} />
                 </div>
                 <div className="fa-info" onClick={() => openDM(friend.id)}>
                   <div className="fa-name">{friend.username}</div>

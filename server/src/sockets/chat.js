@@ -259,7 +259,35 @@ export function registerChatHandlers(io, socket) {
     }
   });
 
+  // Profile change propagation
+  socket.on("profile:updated", (data) => {
+    io.emit("profile:updated", { userId, username, ...data });
+  });
+
+  // Voice channel join/leave
+  socket.on("voice:join", ({ channelId, serverId }) => {
+    const room = "voice_" + serverId + "_" + channelId;
+    socket.join(room);
+    socket.to(room).emit("voice:user-joined", { userId, username });
+    socket.data.voiceRoom = room;
+  });
+
+  socket.on("voice:leave", ({ channelId, serverId }) => {
+    const room = "voice_" + serverId + "_" + channelId;
+    socket.leave(room);
+    socket.to(room).emit("voice:user-left", { userId, username });
+    socket.data.voiceRoom = null;
+  });
+
+  socket.on("voice:speaking", ({ channelId, serverId, speaking }) => {
+    const room = "voice_" + serverId + "_" + channelId;
+    socket.to(room).emit("voice:speaking", { userId, username, speaking });
+  });
+
   socket.on("disconnect", () => {
+    if (socket.data.voiceRoom) {
+      io.to(socket.data.voiceRoom).emit("voice:user-left", { userId, username });
+    }
     const sockets = userSockets.get(userId);
     if (sockets) {
       sockets.delete(socket.id);

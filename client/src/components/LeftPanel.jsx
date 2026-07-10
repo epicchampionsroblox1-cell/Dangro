@@ -4,7 +4,7 @@ import { api } from "../services/api";
 
 const SERVER_COLORS = ["#5865f2", "#3ba55d", "#ed4245", "#f0b232", "#a855f7", "#22d3ee", "#eb459e", "#57f287"];
 
-const AVATARS = ["#5865f2", "#3ba55d", "#ed4245", "#f0b232", "#a855f7", "#22d3ee"];
+const AVATARS = ["#007aff", "#34c759", "#ff3b30", "#ffcc00", "#af52de", "#ff9500", "#5ac8fa", "#ff2d55"];
 
 function hashColor(str) {
   let hash = 0;
@@ -141,9 +141,9 @@ export default function LeftPanel({ onSettings, onVoiceSettings, onServerSetting
   const textChannels = currentServer?.channels?.filter(c => c.type !== "voice") || [];
   const voiceChannels = currentServer?.channels?.filter(c => c.type === "voice") || [];
 
-  const statusColor = state.status === "online" ? "var(--green)" :
-    state.status === "idle" ? "var(--yellow)" :
-    state.status === "dnd" ? "var(--red)" : "var(--text-muted)";
+  const statusClass = state.status === "online" ? "online" :
+    state.status === "idle" ? "idle" :
+    state.status === "dnd" ? "dnd" : "offline";
 
   const onlineFriends = state.friends.filter(f => f.status !== "offline" && f.status !== "pending_in" && f.status !== "pending_out");
 
@@ -245,26 +245,27 @@ export default function LeftPanel({ onSettings, onVoiceSettings, onServerSetting
                   <div className="empty-state-desc" style={{ fontSize: 11 }}>Add friends to start chatting.</div>
                 </div>
               ) : (
-                onlineFriends.map(friend => (
-                  <div
-                    key={friend.id}
-                    className={"dm-item" + (state.activeChatType === "dm" && state.activeDmFriendId === friend.id ? " active" : "")}
-                    onClick={() => openDM(friend.id)}
-                    style={{ padding: "6px 12px" }}
-                  >
-                    <div className="dm-avatar" style={{ backgroundColor: hashColor(friend.username), width: 28, height: 28, fontSize: 11 }}>
-                      {friend.username.charAt(0).toUpperCase()}
+                onlineFriends.map(friend => {
+                  const fc = friend.status === "online" ? "online" :
+                    friend.status === "dnd" ? "dnd" :
+                    friend.status === "idle" ? "idle" : "offline";
+                  return (
+                    <div
+                      key={friend.id}
+                      className={"dm-item" + (state.activeChatType === "dm" && state.activeDmFriendId === friend.id ? " active" : "")}
+                      onClick={() => openDM(friend.id)}
+                      style={{ padding: "6px 12px" }}
+                    >
+                      <div className="dm-avatar" style={{ backgroundColor: hashColor(friend.username), width: 28, height: 28, fontSize: 11 }}>
+                        {friend.username.charAt(0).toUpperCase()}
+                        <span className={"status-ring status-ring-sm " + fc} />
+                      </div>
+                      <div className="dm-info" style={{ marginLeft: 8 }}>
+                        <div className="dm-username" style={{ fontSize: 13 }}>{friend.username}</div>
+                      </div>
                     </div>
-                    <div className="dm-info" style={{ marginLeft: 8 }}>
-                      <div className="dm-username" style={{ fontSize: 13 }}>{friend.username}</div>
-                    </div>
-                    <span className="dm-status-dot" style={{
-                      background: friend.status === "online" ? "var(--green)" :
-                        friend.status === "idle" ? "var(--yellow)" :
-                        friend.status === "dnd" ? "var(--red)" : "var(--text-muted)"
-                    }} />
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           )}
@@ -272,9 +273,13 @@ export default function LeftPanel({ onSettings, onVoiceSettings, onServerSetting
 
         {/* User Profile */}
         <div className="user-profile">
-          <div className="user-avatar" style={{ background: "var(--accent)" }}>
-            {state.displayName.charAt(0).toUpperCase()}
-            <span className="status-dot" style={{ background: statusColor }} />
+          <div className="user-avatar" style={{ background: hashColor(state.displayName) }}>
+            {state.profilePic ? (
+              <img src={state.profilePic} alt="" style={{ width: "100%", height: "100%", borderRadius: "50%", objectFit: "cover" }} />
+            ) : (
+              state.displayName.charAt(0).toUpperCase()
+            )}
+            <span className={"status-ring " + statusClass} />
           </div>
           <div className="user-info">
             <div className="user-name">{state.displayName}</div>
