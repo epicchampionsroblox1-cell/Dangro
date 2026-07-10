@@ -3,6 +3,7 @@ import { UserRepository } from "../database/repositories/userRepository.js";
 import { TokenRepository } from "../database/repositories/tokenRepository.js";
 import { generateAccessToken, generateRefreshToken } from "../services/jwt.js";
 import { authenticateToken } from "../middleware/auth.js";
+import { prisma } from "../database/init.js";
 
 export const authRouter = Router();
 
@@ -20,6 +21,7 @@ function sanitizeUser(user) {
     status: user.status,
     customStatus: user.customStatus,
     profilePic: user.profilePic,
+    banner: user.banner || "",
     theme: user.theme,
     createdAt: user.createdAt,
   };
@@ -157,15 +159,16 @@ authRouter.get("/me", authenticateToken, (req, res) => {
   res.json({ user: sanitizeUser(req.user) });
 });
 
-authRouter.put("/me", authenticateToken, async (req, res) => {
+  authRouter.put("/me", authenticateToken, async (req, res) => {
   try {
-    const { displayName, bio, status, customStatus, profilePic, theme } = req.body;
+    const { displayName, bio, status, customStatus, profilePic, banner, theme } = req.body;
     const updates = {};
     if (displayName !== undefined) updates.display_name = displayName;
     if (bio !== undefined) updates.bio = bio;
     if (status !== undefined) updates.status = status;
     if (customStatus !== undefined) updates.custom_status = customStatus;
     if (profilePic !== undefined) updates.profile_pic = profilePic;
+    if (banner !== undefined) updates.banner = banner;
     if (theme !== undefined) updates.theme = theme;
 
     const user = await UserRepository.updateProfile(req.userId, updates);
@@ -198,6 +201,23 @@ authRouter.put("/me/password", authenticateToken, async (req, res) => {
     res.json({ success: true, message: "Password updated. Please log in again." });
   } catch (err) {
     console.error("Password change error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+authRouter.get("/users/profile/:id", authenticateToken, async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.params.id },
+      select: { id: true, username: true, displayName: true, bio: true, status: true, customStatus: true, profilePic: true, banner: true, createdAt: true },
+    });
+    if (!user) return res.status(404).json({ error: "User not found" });
+    const friendCount = await prisma.friendship.count({
+      where: { OR: [{ userId: user.id }, { friendId: user.id }], status: "accepted" },
+    });
+    res.json({ user: { ...user, friendCount } });
+  } catch (err) {
+    console.error("Get user profile error:", err);
     res.status(500).json({ error: "Internal server error" });
   }
 });

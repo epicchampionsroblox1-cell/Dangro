@@ -17,6 +17,7 @@ model User {
   status       String   @default("online")
   customStatus String   @default("") @map("custom_status")
   profilePic   String   @default("") @map("profile_pic")
+  banner       String   @default("") @map("banner")
   theme        String   @default("dark")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
@@ -29,8 +30,30 @@ model User {
   invites      Invite[]
   groupChats   GroupChat[]
   roleMembers  RoleMember[]
+  friendGroups FriendGroupMember[]
 
   @@map("users")
+}
+
+model FriendGroup {
+  id     String @id @default(uuid())
+  name   String
+  color  String @default("#5865f2")
+
+  members FriendGroupMember[]
+
+  @@map("friend_groups")
+}
+
+model FriendGroupMember {
+  groupId String @map("group_id")
+  userId  String @map("user_id")
+
+  group FriendGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user  User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, userId])
+  @@map("friend_group_members")
 }
 
 model RefreshToken {
@@ -50,6 +73,7 @@ model Server {
   name       String
   icon       String   @default("D")
   ownerId    String   @map("owner_id")
+  coOwnerIds String   @default("[]") @map("co_owner_ids")
   inviteCode String?  @unique @map("invite_code")
   isPublic   Boolean  @default(true) @map("is_public")
   createdAt  DateTime @default(now()) @map("created_at")

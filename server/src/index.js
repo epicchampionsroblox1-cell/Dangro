@@ -17,6 +17,7 @@ import { serversRouter } from "./routes/servers.js";
 import { channelsRouter } from "./routes/channels.js";
 import { messagesRouter } from "./routes/messages.js";
 import { friendsRouter } from "./routes/friends.js";
+import { friendGroupsRouter } from "./routes/friendGroups.js";
 import { uploadRouter } from "./routes/upload.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -74,6 +75,7 @@ app.use("/api/servers", authenticateToken, serversRouter);
 app.use("/api/channels", authenticateToken, channelsRouter);
 app.use("/api/messages", authenticateToken, messagesRouter);
 app.use("/api/friends", authenticateToken, friendsRouter);
+app.use("/api/friend-groups", authenticateToken, friendGroupsRouter);
 app.use("/api/upload", uploadRouter);
 
 app.use((req, res) => {

@@ -6,23 +6,29 @@ import FriendActivity from "../components/FriendActivity";
 import GamingHub from "../components/GamingHub";
 import MiningGame from "../components/MiningGame";
 import ChatPanel from "../components/ChatPanel";
-import RightPanel from "../components/RightPanel";
 import SettingsPanel from "../components/SettingsPanel";
 import ServerSettingsPanel from "../components/ServerSettingsPanel";
 import VoiceSettingsPanel from "../components/VoiceSettingsPanel";
 import ToastContainer from "../components/ToastContainer";
 import CallContainer from "../components/CallContainer";
+import ImagePopup from "../components/ImagePopup";
+import UserProfile from "../components/UserProfile";
+import Clock from "../components/Clock";
 
-const AVATARS = ["#7c3aed", "#10b981", "#ef4444", "#f59e0b", "#ec4899", "#3b82f6"];
-const SERVER_COLORS = ["#5865f2", "#3ba55d", "#ed4245", "#f0b232", "#a855f7", "#22d3ee", "#eb459e", "#57f287"];
+const AVATARS = ["#007aff", "#34c759", "#ff3b30", "#ffcc00", "#af52de", "#ff9500", "#5ac8fa", "#ff2d55"];
+const SERVER_COLORS = ["#007aff", "#34c759", "#ff3b30", "#ffcc00", "#af52de", "#ff9500", "#5ac8fa", "#ff2d55"];
 
 function hashColor(str) {
   let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = str.charCodeAt(i) + ((hash << 5) - hash);
-  }
+  for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
   return AVATARS[Math.abs(hash) % AVATARS.length];
 }
+
+const ACTIVITY_PLACEHOLDERS = [
+  { icon: "🎵", title: "Spotify", desc: "Not listening to anything" },
+  { icon: "🎮", title: "Game Activity", desc: "No game detected" },
+  { icon: "📺", title: "YouTube", desc: "No video playing" },
+];
 
 export default function MainPage() {
   const { state, dispatch, logout, addToast } = useApp();
@@ -43,40 +49,20 @@ export default function MainPage() {
   const [channelType, setChannelType] = React.useState("text");
   const [inviteCode, setInviteCode] = React.useState("");
   const [showStatusMenu, setShowStatusMenu] = React.useState(false);
-  const [mobileChat, setMobileChat] = React.useState(false);
-
-  React.useEffect(() => {
-    if (state.activeChatType && window.innerWidth <= 480) {
-      setMobileChat(true);
-    }
-  }, [state.activeChatType]);
 
   const currentServer = state.servers.find(s => s.id === state.activeServerId);
 
-  const statusColor = state.status === "online" ? "var(--green)" :
-    state.status === "idle" ? "var(--yellow)" :
-    state.status === "dnd" ? "var(--red)" : "var(--text-muted)";
+  const statusClass = state.status === "online" ? "online" :
+    state.status === "dnd" ? "dnd" :
+    state.status === "idle" ? "idle" : "offline";
 
   React.useEffect(() => {
-    socket.on("call:incoming", (data) => {
-      setIncomingCall(data);
-    });
-    socket.on("call:accepted", (data) => {
-      addToast(`${data.username} accepted your call!`, "success");
-    });
-    socket.on("call:declined", (data) => {
-      addToast(`${data.username} declined your call`, "info");
-      setCallOpen(false);
-    });
-    socket.on("call:ended", (data) => {
-      addToast(`${data.username} ended the call`, "info");
-      setCallOpen(false);
-    });
+    socket.on("call:incoming", (data) => setIncomingCall(data));
+    socket.on("call:accepted", (data) => { addToast(`${data.username} accepted your call!`, "success"); });
+    socket.on("call:declined", (data) => { addToast(`${data.username} declined your call`, "info"); setCallOpen(false); });
+    socket.on("call:ended", (data) => { addToast(`${data.username} ended the call`, "info"); setCallOpen(false); });
     return () => {
-      socket.off("call:incoming");
-      socket.off("call:accepted");
-      socket.off("call:declined");
-      socket.off("call:ended");
+      socket.off("call:incoming"); socket.off("call:accepted"); socket.off("call:declined"); socket.off("call:ended");
     };
   }, []);
 
@@ -171,12 +157,7 @@ export default function MainPage() {
       await api.channels.create(state.activeServerId, name, channelType);
       const servers = await api.servers.list();
       dispatch({ type: "SET_SERVERS", payload: servers });
-      if (channelType === "text") {
-        dispatch({
-          type: "SET_ACTIVE_CHAT",
-          payload: { activeChatType: "channel", activeChannelId: name },
-        });
-      }
+      if (channelType === "text") dispatch({ type: "SET_ACTIVE_CHAT", payload: { activeChatType: "channel", activeChannelId: name } });
       setShowChannelModal(false);
       setChannelName("");
       addToast("Channel created!", "success");
@@ -195,51 +176,72 @@ export default function MainPage() {
   const textChannels = currentServer?.channels?.filter(c => c.type !== "voice") || [];
   const voiceChannels = currentServer?.channels?.filter(c => c.type === "voice") || [];
 
-  const hasDms = state.friends.some(f =>
-    state.messages["dm_" + f.id] && state.messages["dm_" + f.id].length > 0
-  );
+  const unreadCount = state.friends.length;
 
   return (
     <>
       <div className="app-wrapper">
-        <div className="hub-panel">
-          <div className="hub-nav">
-            <button
-              className={"hub-nav-btn" + (state.activeNavTab === "friends" ? " active" : "")}
-              onClick={() => dispatch({ type: "SET_NAV_TAB", payload: "friends" })}
-            >Friends</button>
-            <button
-              className={"hub-nav-btn" + (state.activeNavTab === "dms" ? " active" : "")}
-              onClick={() => dispatch({ type: "SET_NAV_TAB", payload: "dms" })}
-            >DMs</button>
-            <button
-              className={"hub-nav-btn" + (state.activeNavTab === "servers" ? " active" : "")}
-              onClick={() => {
-                dispatch({ type: "SET_NAV_TAB", payload: "servers" });
-                if (!currentServer && state.servers.length > 0) {
-                  handleServerClick(state.servers[0]);
-                }
-              }}
-            >Servers</button>
+        {/* TOP BAR - Server bar */}
+        <div className="top-bar">
+          <div className="top-bar-logo" onClick={() => dispatch({ type: "SET_ACTIVE_CHAT", payload: { activeNavTab: "friends", activeServerId: null, activeChatType: null, activeChannelId: null, activeDmFriendId: null } })}>
+            D
+            {unreadCount > 0 && <span className="unread-badge">{unreadCount > 99 ? "99+" : unreadCount}</span>}
           </div>
+          <div className="top-bar-divider" />
+          {state.servers.map((server, i) => (
+            <div
+              key={server.id}
+              className={"top-bar-server" + (server.id === state.activeServerId && state.activeNavTab === "servers" ? " active" : "")}
+              onClick={() => handleServerClick(server)}
+              title={server.name}
+              style={{ backgroundColor: SERVER_COLORS[i % SERVER_COLORS.length] }}
+            >
+              {server.icon || server.name.charAt(0).toUpperCase()}
+            </div>
+          ))}
+          <div className="top-bar-server add-server" onClick={() => setShowServerModal(true)} title="Create Server">+</div>
+          <div className="top-bar-server join-server" onClick={() => setShowJoinModal(true)} title="Join Server">&#128279;</div>
+        </div>
 
-          <div className="hub-content">
+        {/* LEFT PANEL - Activity / Friends / DMs / Servers */}
+        <div className="left-panel">
+          <div className="left-panel-header">
+            <h2>{state.activeNavTab === "friends" ? "Activity" :
+                  state.activeNavTab === "dms" ? "Direct Messages" :
+                  state.activeNavTab === "servers" && currentServer ? currentServer.name : "Dangro"}</h2>
+          </div>
+          <div className="left-panel-content">
+            {/* Nav tabs */}
+            <div className="dm-subtabs" style={{ marginBottom: 8 }}>
+              <button className={"dm-subtab" + (state.activeNavTab === "friends" ? " active" : "")}
+                onClick={() => dispatch({ type: "SET_NAV_TAB", payload: "friends" })}>Feed</button>
+              <button className={"dm-subtab" + (state.activeNavTab === "dms" ? " active" : "")}
+                onClick={() => dispatch({ type: "SET_NAV_TAB", payload: "dms" })}>DMs</button>
+              <button className={"dm-subtab" + (state.activeNavTab === "servers" ? " active" : "")}
+                onClick={() => {
+                  dispatch({ type: "SET_NAV_TAB", payload: "servers" });
+                  if (!currentServer && state.servers.length > 0) handleServerClick(state.servers[0]);
+                }}>Servers</button>
+            </div>
+
             {state.activeNavTab === "friends" && (
-              <FriendActivity />
+              <>
+                <FriendActivity />
+              </>
             )}
 
             {state.activeNavTab === "dms" && (
-              <div className="hub-dms">
-                <div className="hub-section-header">Direct Messages</div>
+              <div className="dm-section">
+                <div className="dm-section-header">Direct Messages</div>
                 {state.friends.filter(f => f.status !== "pending_in" && f.status !== "pending_out").length === 0 ? (
-                  <div className="empty-state" style={{ padding: "24px 16px" }}>
-                    <div className="empty-state-icon" style={{ fontSize: 32 }}>💬</div>
-                    <div className="empty-state-title" style={{ fontSize: 14 }}>No friends yet</div>
-                    <div className="empty-state-desc" style={{ fontSize: 12 }}>Add friends to start messaging.</div>
+                  <div className="empty-state">
+                    <div className="empty-state-icon">&#128172;</div>
+                    <div className="empty-state-title">No friends yet</div>
+                    <div className="empty-state-desc">Add friends using the Feed tab.</div>
                   </div>
                 ) : (
                   <>
-                    <div className="hub-search">
+                    <div className="dm-friend-search">
                       <input type="text" placeholder="Search friends..." value={state.friendSearchQuery}
                         onChange={e => dispatch({ type: "SET_FRIEND_SEARCH", payload: e.target.value })} />
                     </div>
@@ -250,27 +252,24 @@ export default function MainPage() {
                         return !q || f.username.toLowerCase().includes(q);
                       })
                       .map(friend => {
-                        const fc = friend.status === "online" ? "var(--green)" :
-                          friend.status === "idle" ? "var(--yellow)" :
-                          friend.status === "dnd" ? "var(--red)" : "var(--text-muted)";
+                        const fc = friend.status === "online" ? "online" :
+                          friend.status === "dnd" ? "dnd" :
+                          friend.status === "idle" ? "idle" : "offline";
                         return (
                           <div
                             key={friend.id}
-                            className={"hub-dm-item" + (state.activeChatType === "dm" && state.activeDmFriendId === friend.id ? " active" : "")}
+                            className={"dm-item" + (state.activeChatType === "dm" && state.activeDmFriendId === friend.id ? " active" : "")}
                             onClick={() => {
-                              dispatch({
-                                type: "SET_ACTIVE_CHAT",
-                                payload: { activeChatType: "dm", activeDmFriendId: friend.id },
-                              });
+                              dispatch({ type: "SET_ACTIVE_CHAT", payload: { activeChatType: "dm", activeDmFriendId: friend.id } });
                             }}
                           >
-                            <div className="hub-dm-avatar" style={{ backgroundColor: hashColor(friend.username) }}>
+                            <div className="dm-avatar" style={{ backgroundColor: hashColor(friend.username) }}>
                               {friend.username.charAt(0).toUpperCase()}
-                              <span className="hub-dm-status" style={{ background: fc }} />
+                              <span className={`status-ring status-ring-sm ${fc}`} />
                             </div>
-                            <div className="hub-dm-info">
-                              <div className="hub-dm-name">{friend.username}</div>
-                              <div className="hub-dm-sub">{friend.customStatus || friend.status}</div>
+                            <div className="dm-info">
+                              <div className="dm-username">{friend.username}</div>
+                              <div className="dm-status">{friend.customStatus || friend.status}</div>
                             </div>
                           </div>
                         );
@@ -280,129 +279,122 @@ export default function MainPage() {
               </div>
             )}
 
-            {state.activeNavTab === "servers" && (
-              <div className="hub-servers">
-                <div className="hub-server-bar">
-                  {state.servers.map((server, i) => (
-                    <div
-                      key={server.id}
-                      className={"hub-server-icon" + (server.id === state.activeServerId ? " active" : "")}
-                      onClick={() => handleServerClick(server)}
-                      title={server.name}
-                      style={{ backgroundColor: SERVER_COLORS[i % SERVER_COLORS.length] }}
-                    >
-                      {server.icon || server.name.charAt(0).toUpperCase()}
-                    </div>
-                  ))}
-                  <div className="hub-server-icon add" onClick={() => setShowServerModal(true)} title="Create Server">+</div>
-                  <div className="hub-server-icon join" onClick={() => setShowJoinModal(true)} title="Join Server">🔗</div>
+            {state.activeNavTab === "servers" && currentServer && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                {textChannels.map(ch => (
+                  <div
+                    key={ch.id}
+                    className={"dm-item" + (state.activeChatType === "channel" && ch.id === state.activeChannelId ? " active" : "")}
+                    onClick={() => handleChannelClick(ch)}
+                  >
+                    <span style={{ color: "var(--text-muted)", width: 20, textAlign: "center" }}>#</span>
+                    <span>{ch.name}</span>
+                  </div>
+                ))}
+                {voiceChannels.map(ch => (
+                  <div key={ch.id} className="dm-item">
+                    <span style={{ color: "var(--text-muted)", width: 20, textAlign: "center" }}>&#128266;</span>
+                    <span>{ch.name}</span>
+                  </div>
+                ))}
+                <div style={{ height: 12 }} />
+                <div className="dm-item" onClick={() => setShowChannelModal(true)}>
+                  <span style={{ color: "var(--text-muted)", fontSize: 18, width: 20, textAlign: "center" }}>+</span>
+                  <span style={{ color: "var(--text-muted)" }}>Add Channel</span>
                 </div>
-
-                {currentServer && (
-                  <div className="hub-server-channels">
-                    <div className="hub-server-name">{currentServer.name}</div>
-
-                    <div className="hub-channel-section">
-                      <div className="hub-channel-header">
-                        <span>Text Channels</span>
-                        <button className="hub-channel-add" onClick={() => setShowChannelModal(true)}>+</button>
-                      </div>
-                      {textChannels.map(ch => (
-                        <div
-                          key={ch.id}
-                          className={"hub-channel-item" + (state.activeChatType === "channel" && ch.id === state.activeChannelId ? " active" : "")}
-                          onClick={() => handleChannelClick(ch)}
-                        >
-                          <span className="hub-channel-hash">#</span>
-                          <span>{ch.name}</span>
-                        </div>
-                      ))}
-                    </div>
-
-                    {voiceChannels.length > 0 && (
-                      <div className="hub-channel-section">
-                        <div className="hub-channel-header">
-                          <span>Voice Channels</span>
-                        </div>
-                        {voiceChannels.map(ch => (
-                          <div key={ch.id} className="hub-channel-item">
-                            <span className="hub-channel-hash">🔊</span>
-                            <span>{ch.name}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    <div className="hub-channel-section">
-                      <div className="hub-channel-item" onClick={() => setServerSettings(currentServer)}>
-                        <span className="hub-channel-hash">⚙</span>
-                        <span>Server Settings</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {state.servers.length === 0 && (
-                  <div className="empty-state" style={{ padding: "24px 16px" }}>
-                    <div className="empty-state-icon" style={{ fontSize: 32 }}>🏠</div>
-                    <div className="empty-state-title" style={{ fontSize: 14 }}>No servers yet</div>
-                    <div className="empty-state-desc" style={{ fontSize: 12 }}>Create or join a server to get started.</div>
-                  </div>
-                )}
+                <div className="dm-item" onClick={() => setServerSettings(currentServer)}>
+                  <span style={{ fontSize: 14, width: 20, textAlign: "center" }}>&#9881;</span>
+                  <span>Server Settings</span>
+                </div>
               </div>
             )}
-          </div>
 
-          <div className="hub-bottom">
-            <GamingHub onStartMining={() => setMiningOpen(true)} />
-          </div>
+            {state.activeNavTab === "servers" && !currentServer && state.servers.length > 0 && (
+              <div className="empty-state">
+                <div className="empty-state-icon">&#127987;</div>
+                <div className="empty-state-title">Select a server</div>
+                <div className="empty-state-desc">Click a server from the top bar.</div>
+              </div>
+            )}
 
-          <div className="hub-profile">
-            <div className="hub-profile-avatar" style={{ background: hashColor(state.displayName) }}>
-              {state.displayName.charAt(0).toUpperCase()}
-              <span className="status-dot" style={{ background: statusColor }} />
-            </div>
-            <div className="hub-profile-info" onClick={() => setShowStatusMenu(!showStatusMenu)}>
-              <div className="hub-profile-name">{state.displayName}</div>
-              <div className="hub-profile-status">{state.customStatus || state.status}</div>
-            </div>
-            <div className="hub-profile-controls">
-              <button className="hub-profile-btn" onClick={() => setVoiceSettingsOpen(true)} title="Voice">🎤</button>
-              <button className="hub-profile-btn" onClick={() => setShowLinkAccount(true)} title="Linked Accounts">🔗</button>
-              <button className="hub-profile-btn" onClick={() => setSettingsOpen(true)} title="Settings">⚙️</button>
-              <button className="hub-profile-btn" onClick={logout} title="Log Out">🚪</button>
-            </div>
-            {showStatusMenu && (
-              <div className="status-menu">
-                <div className="status-menu-item" onClick={() => setStatus("online")}>
-                  <span className="status-menu-dot" style={{ background: "var(--green)" }} />
-                  Online
-                </div>
-                <div className="status-menu-item" onClick={() => setStatus("idle")}>
-                  <span className="status-menu-dot" style={{ background: "var(--yellow)" }} />
-                  Away
-                </div>
-                <div className="status-menu-item" onClick={() => setStatus("dnd")}>
-                  <span className="status-menu-dot" style={{ background: "var(--red)" }} />
-                  Do Not Disturb
-                </div>
-                <div className="status-menu-item" onClick={() => setStatus("offline")}>
-                  <span className="status-menu-dot" style={{ background: "var(--text-muted)" }} />
-                  Offline
-                </div>
+            {state.activeNavTab === "servers" && state.servers.length === 0 && (
+              <div className="empty-state">
+                <div className="empty-state-icon">&#127968;</div>
+                <div className="empty-state-title">No servers</div>
+                <div className="empty-state-desc">Create or join a server to get started.</div>
               </div>
             )}
           </div>
         </div>
 
+        {/* RIGHT PANEL - Chat Area */}
         <ChatPanel
           onStartCall={() => { setVoiceSettingsOpen(false); setCallOpen(true); setCallTarget(null); }}
-          mobileChat={mobileChat}
-          onMobileBack={() => setMobileChat(false)}
+          onSettings={() => setSettingsOpen(true)}
         />
-        <RightPanel />
+
+        {/* BOTTOM BAR - User/Settings/Clock */}
+        <div className="bottom-bar" style={{ position: "relative" }}>
+          <div className="bottom-bar-left" onClick={() => setShowStatusMenu(!showStatusMenu)}>
+            <div className="bottom-bar-avatar" style={{ background: hashColor(state.displayName) }}>
+              {state.profilePic ? (
+                <img src={state.profilePic} alt="" style={{ width: "100%", height: "100%", borderRadius: "50%", objectFit: "cover" }} />
+              ) : (
+                state.displayName.charAt(0).toUpperCase()
+              )}
+              <span className={`status-ring ${statusClass}`} />
+            </div>
+            <div className="bottom-bar-info">
+              <div className="bottom-bar-name">{state.displayName}</div>
+              <div className="bottom-bar-status">{state.customStatus || state.status}</div>
+            </div>
+          </div>
+
+          {showStatusMenu && (
+            <div className="status-menu">
+              <div className="status-menu-item" onClick={() => setStatus("online")}>
+                <span className="status-menu-dot" style={{ background: "var(--green)" }} />
+                Online
+              </div>
+              <div className="status-menu-item" onClick={() => setStatus("idle")}>
+                <span className="status-menu-dot" style={{ background: "var(--blue)" }} />
+                Idle
+              </div>
+              <div className="status-menu-item" onClick={() => setStatus("dnd")}>
+                <span className="status-menu-dot" style={{ background: "var(--red)" }} />
+                Do Not Disturb
+              </div>
+              <div className="status-menu-item" onClick={() => setStatus("offline")}>
+                <span className="status-menu-dot" style={{ background: "var(--grey)" }} />
+                Offline
+              </div>
+              <div className="status-menu-item" onClick={() => setShowLinkAccount(true)}>
+                <span style={{ fontSize: 14 }}>🔗</span>
+                Link Accounts
+              </div>
+            </div>
+          )}
+
+          <div className="bottom-bar-right">
+            <Clock />
+            <button className="bottom-bar-btn" onClick={() => setVoiceSettingsOpen(true)} title="Voice">&#128266;</button>
+            <button className="bottom-bar-btn" onClick={() => setSettingsOpen(true)} title="Settings">&#9881;</button>
+            <button className="bottom-bar-btn" onClick={logout} title="Log Out">&#128682;</button>
+          </div>
+        </div>
       </div>
 
+      {/* IMAGE POPUP */}
+      {state.imagePopup && (
+        <ImagePopup src={state.imagePopup} onClose={() => dispatch({ type: "SET_IMAGE_POPUP", payload: null })} />
+      )}
+
+      {/* USER PROFILE */}
+      {state.profileModalUser && (
+        <UserProfile userId={state.profileModalUser} onClose={() => dispatch({ type: "SET_PROFILE_MODAL", payload: null })} />
+      )}
+
+      {/* INCOMING CALL */}
       {incomingCall && (
         <div className="incoming-call-overlay">
           <div className="incoming-call-card">
@@ -412,78 +404,47 @@ export default function MainPage() {
             <div className="incoming-call-name">{incomingCall.username}</div>
             <div className="incoming-call-label">Incoming Voice Call</div>
             <div className="incoming-call-actions">
-              <button className="incoming-call-btn decline" onClick={declineIncomingCall}>✕</button>
-              <button className="incoming-call-btn accept" onClick={acceptIncomingCall}>📞</button>
+              <button className="incoming-call-btn decline" onClick={declineIncomingCall}>&#10005;</button>
+              <button className="incoming-call-btn accept" onClick={acceptIncomingCall}>&#128222;</button>
             </div>
           </div>
         </div>
       )}
 
+      {/* LINK ACCOUNT */}
       {showLinkAccount && (
         <div className="link-account-modal" onClick={() => setShowLinkAccount(false)}>
           <div className="link-account-content" onClick={e => e.stopPropagation()}>
-            <h3>🔗 Link Accounts</h3>
+            <h3>Link Accounts</h3>
             <p>Connect your gaming and music accounts to show your activity.</p>
-            <div className="link-account-option" onClick={() => {
-              const linked = JSON.parse(localStorage.getItem("dangro_linked_accounts") || "{}");
-              linked.spotify = !linked.spotify;
-              localStorage.setItem("dangro_linked_accounts", JSON.stringify(linked));
-              setShowLinkAccount(false);
-            }}>
-              <div className="link-account-option-icon">🎵</div>
-              <div className="link-account-option-info">
-                <h4>Spotify</h4>
-                <p>Show what you're listening to</p>
+            {[
+              { icon: "🎵", name: "Spotify", desc: "Show what you're listening to" },
+              { icon: "🎮", name: "Steam", desc: "Show what you're playing" },
+              { icon: "🎯", name: "Xbox", desc: "Show your Xbox activity" },
+              { icon: "🔄", name: "PlayStation", desc: "Show your PlayStation activity" },
+            ].map(item => (
+              <div key={item.name} className="link-account-option" onClick={() => {
+                const linked = JSON.parse(localStorage.getItem("dangro_linked_accounts") || "{}");
+                linked[item.name.toLowerCase()] = !linked[item.name.toLowerCase()];
+                localStorage.setItem("dangro_linked_accounts", JSON.stringify(linked));
+                setShowLinkAccount(false);
+              }}>
+                <div className="link-account-option-icon">{item.icon}</div>
+                <div className="link-account-option-info">
+                  <h4>{item.name}</h4>
+                  <p>{item.desc}</p>
+                </div>
               </div>
-            </div>
-            <div className="link-account-option" onClick={() => {
-              const linked = JSON.parse(localStorage.getItem("dangro_linked_accounts") || "{}");
-              linked.steam = !linked.steam;
-              localStorage.setItem("dangro_linked_accounts", JSON.stringify(linked));
-              setShowLinkAccount(false);
-            }}>
-              <div className="link-account-option-icon">🎮</div>
-              <div className="link-account-option-info">
-                <h4>Steam</h4>
-                <p>Show what you're playing</p>
-              </div>
-            </div>
-            <div className="link-account-option" onClick={() => {
-              const linked = JSON.parse(localStorage.getItem("dangro_linked_accounts") || "{}");
-              linked.xbox = !linked.xbox;
-              localStorage.setItem("dangro_linked_accounts", JSON.stringify(linked));
-              setShowLinkAccount(false);
-            }}>
-              <div className="link-account-option-icon">🎯</div>
-              <div className="link-account-option-info">
-                <h4>Xbox</h4>
-                <p>Show your Xbox activity</p>
-              </div>
-            </div>
-            <div className="link-account-option" onClick={() => {
-              const linked = JSON.parse(localStorage.getItem("dangro_linked_accounts") || "{}");
-              linked.playstation = !linked.playstation;
-              localStorage.setItem("dangro_linked_accounts", JSON.stringify(linked));
-              setShowLinkAccount(false);
-            }}>
-              <div className="link-account-option-icon">🔄</div>
-              <div className="link-account-option-info">
-                <h4>PlayStation</h4>
-                <p>Show your PlayStation activity</p>
-              </div>
-            </div>
+            ))}
           </div>
         </div>
       )}
 
+      {/* MODALS */}
       <ToastContainer />
       {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
-      {serverSettings && (
-        <ServerSettingsPanel server={serverSettings} onClose={() => setServerSettings(null)} />
-      )}
-      {voiceSettingsOpen && (
-        <VoiceSettingsPanel onClose={() => setVoiceSettingsOpen(false)} />
-      )}
+      {serverSettings && <ServerSettingsPanel server={serverSettings} onClose={() => setServerSettings(null)} />}
+      {voiceSettingsOpen && <VoiceSettingsPanel onClose={() => setVoiceSettingsOpen(false)} />}
       {callOpen && (
         <CallContainer
           onClose={() => { setCallOpen(false); setCallTarget(null); }}

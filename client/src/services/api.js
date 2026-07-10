@@ -208,6 +208,18 @@ export const api = {
     block: (id) => request(`/friends/${id}/block`, { method: "POST" }),
     unblock: (id) => request(`/friends/${id}/unblock`, { method: "POST" }),
   },
+  friendGroups: {
+    list: () => request("/friend-groups"),
+    create: (name, color, memberIds) => request("/friend-groups", { method: "POST", body: JSON.stringify({ name, color, memberIds }) }),
+    update: (id, data) => request(`/friend-groups/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+    remove: (id) => request(`/friend-groups/${id}`, { method: "DELETE" }),
+    addMember: (id, userId) => request(`/friend-groups/${id}/members`, { method: "POST", body: JSON.stringify({ userId }) }),
+    removeMember: (id, userId) => request(`/friend-groups/${id}/members/${userId}`, { method: "DELETE" }),
+  },
+  users: {
+    profile: (id) => request(`/auth/users/profile/${id}`),
+    search: (query) => request(`/auth/users/search?q=${encodeURIComponent(query)}`),
+  },
   upload: {
     file: uploadFile,
     multiple: uploadMultiple,

@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { useApp } from "../contexts/AppContext";
 import { api } from "../services/api";
 
-const AVATARS = ["#5865f2", "#3ba55d", "#ed4245", "#f0b232", "#a855f7", "#22d3ee"];
+const AVATARS = ["#007aff", "#34c759", "#ff3b30", "#ffcc00", "#af52de", "#ff9500", "#5ac8fa", "#ff2d55"];
 
 function hashColor(str) {
   let hash = 0;
@@ -103,10 +103,10 @@ export default function DMList() {
 
   const pendingFriends = state.friends.filter(f => f.status === "pending_in" || f.status === "pending_out");
 
-  const statusColor = (status) =>
-    status === "online" ? "var(--green)" :
-    status === "idle" ? "var(--yellow)" :
-    status === "dnd" ? "var(--red)" : "var(--text-muted)";
+  const statusClass = (status) =>
+    status === "online" ? "online" :
+    status === "dnd" ? "dnd" :
+    status === "idle" ? "idle" : "offline";
 
   return (
     <div className="dm-section">
@@ -138,13 +138,17 @@ export default function DMList() {
               <div key={friend.id} className={"dm-item" + (state.activeChatType === "dm" && state.activeDmFriendId === friend.id ? " active" : "")}
                 onClick={() => openDM(friend.id)}>
                 <div className="dm-avatar" style={{ backgroundColor: hashColor(friend.username) }}>
-                  {friend.username.charAt(0).toUpperCase()}
+                  {friend.profilePic ? (
+                    <img src={friend.profilePic} alt="" style={{ width: "100%", height: "100%", borderRadius: "50%", objectFit: "cover" }} />
+                  ) : (
+                    friend.username.charAt(0).toUpperCase()
+                  )}
+                  <span className={"status-ring status-ring-sm " + statusClass(friend.status)} />
                 </div>
                 <div className="dm-info">
                   <div className="dm-username">{friend.username}</div>
                   <div className="dm-status">{friend.customStatus || friend.status}</div>
                 </div>
-                <span className="dm-status-dot" style={{ background: statusColor(friend.status) }} />
               </div>
             ))
           )}
@@ -164,7 +168,11 @@ export default function DMList() {
             return (
               <div key={friend.id} className="dm-item" style={{ cursor: "default" }}>
                 <div className="dm-avatar" style={{ backgroundColor: hashColor(friend.username) }}>
-                  {friend.username.charAt(0).toUpperCase()}
+                  {friend.profilePic ? (
+                    <img src={friend.profilePic} alt="" style={{ width: "100%", height: "100%", borderRadius: "50%", objectFit: "cover" }} />
+                  ) : (
+                    friend.username.charAt(0).toUpperCase()
+                  )}
                 </div>
                 <div className="dm-info">
                   <div className="dm-username">{friend.username}</div>

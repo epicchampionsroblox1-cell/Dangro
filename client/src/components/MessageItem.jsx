@@ -3,32 +3,25 @@ import { useApp } from "../contexts/AppContext";
 import { api } from "../services/api";
 import socket from "../services/socket";
 
-const AVATARS = ["#5865f2", "#3ba55d", "#ed4245", "#f0b232", "#a855f7", "#22d3ee", "#eb459e", "#57f287"];
+const AVATARS = ["#007aff", "#34c759", "#ff3b30", "#ffcc00", "#af52de", "#ff9500", "#5ac8fa", "#ff2d55"];
 
 function hashColor(str) {
   let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = str.charCodeAt(i) + ((hash << 5) - hash);
-  }
+  for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
   return AVATARS[Math.abs(hash) % AVATARS.length];
 }
 
 function getSenderColor(sender, myMsgColor) {
   const myName = localStorage.getItem("dangro_display_name") || "";
-  const myColor = localStorage.getItem("dangro_msg_color");
-  if (myColor && sender === myName) return myColor;
-
+  if (myMsgColor && sender === myName) return myMsgColor;
   const saved = localStorage.getItem("dangro_user_colors_" + sender);
   if (saved) return saved;
-
-  const baseColors = ["#5865f2", "#3ba55d", "#ed4245", "#f0b232", "#a855f7", "#22d3ee", "#eb459e", "#57f287", "#ff6b6b", "#ffa94d", "#ffd43b", "#69db7c", "#4dabf7", "#9775fa", "#f783ac", "#20c997"];
+  const baseColors = ["#007aff", "#34c759", "#ff3b30", "#ffcc00", "#af52de", "#ff9500", "#5ac8fa", "#ff2d55", "#ff6b6b", "#ffa94d", "#ffd43b", "#69db7c", "#4dabf7", "#9775fa", "#f783ac", "#20c997"];
   const idx = Math.abs(sender.split("").reduce((a, c) => a + c.charCodeAt(0), 0)) % baseColors.length;
   const color = baseColors[idx];
-
   const usedColors = JSON.parse(localStorage.getItem("dangro_used_colors") || "{}");
   if (usedColors[color] && usedColors[color] !== sender) {
-    const newIdx = (baseColors.indexOf(color) + 1) % baseColors.length;
-    return baseColors[newIdx];
+    return baseColors[(baseColors.indexOf(color) + 1) % baseColors.length];
   }
   usedColors[color] = sender;
   localStorage.setItem("dangro_used_colors", JSON.stringify(usedColors));
@@ -43,35 +36,37 @@ function formatTime(ts) {
     if (isNaN(d.getTime())) return ts;
     const now = new Date();
     const opts = { hour: "numeric", minute: "2-digit", hour12: true };
-    if (d.toDateString() !== now.toDateString()) {
-      opts.month = "short";
-      opts.day = "numeric";
-    }
+    if (d.toDateString() !== now.toDateString()) { opts.month = "short"; opts.day = "numeric"; }
     return d.toLocaleString("en-US", opts);
-  } catch {
-    return ts;
-  }
+  } catch { return ts; }
+}
+
+function highlightText(text, query) {
+  if (!query || !text) return text;
+  const parts = text.split(new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, "gi"));
+  return parts.map((part, i) =>
+    part.toLowerCase() === query.toLowerCase()
+      ? <mark key={i} className="search-highlight">{part}</mark>
+      : part
+  );
 }
 
 export default function MessageItem({ msg, onReply }) {
-  const { state, addToast } = useApp();
+  const { state, dispatch, addToast } = useApp();
   const isMe = msg.sender === state.displayName;
   const senderColor = getSenderColor(msg.sender, state.msgColor);
   const [showReactionPicker, setShowReactionPicker] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editContent, setEditContent] = useState(msg.content || "");
   const editRef = useRef(null);
+  const query = state.chatSearchQuery.trim().toLowerCase();
 
-  useEffect(() => {
-    if (editing) editRef.current?.focus();
-  }, [editing]);
+  useEffect(() => { if (editing) editRef.current?.focus(); }, [editing]);
 
   function isImageUrl(url) {
     if (!url) return false;
     return /\.(jpeg|jpg|gif|png|webp|bmp)(\?.*)?$/i.test(url) ||
-      url.startsWith("https://images.unsplash.com/") ||
-      url.startsWith("https://i.imgur.com/") ||
-      url.startsWith("https://cdn.discordapp.com/");
+      url.startsWith("https://images.unsplash.com/") || url.startsWith("https://i.imgur.com/");
   }
 
   async function handleReact(emoji) {
@@ -85,35 +80,32 @@ export default function MessageItem({ msg, onReply }) {
     try {
       await api.messages.remove(msg.id);
       socket.emit("message:delete", { messageId: msg.id });
-    } catch (e) {
-      addToast("Failed to delete message", "error");
-    }
+    } catch { addToast("Failed to delete message", "error"); }
   }
 
   async function handleEdit() {
     const content = editContent.trim();
-    if (!content || content === msg.content) {
-      setEditing(false);
-      return;
-    }
+    if (!content || content === msg.content) { setEditing(false); return; }
     try {
       await api.messages.edit(msg.id, content);
       socket.emit("message:edit", { messageId: msg.id, content });
       setEditing(false);
-    } catch (e) {
-      addToast("Failed to edit message", "error");
-    }
+    } catch { addToast("Failed to edit message", "error"); }
   }
 
   function handleEditKey(e) {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleEdit();
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleEdit(); }
+    if (e.key === "Escape") { setEditing(false); setEditContent(msg.content); }
+  }
+
+  function openProfile() {
+    if (msg.senderId) {
+      dispatch({ type: "SET_PROFILE_MODAL", payload: msg.senderId });
     }
-    if (e.key === "Escape") {
-      setEditing(false);
-      setEditContent(msg.content);
-    }
+  }
+
+  function openImage(src) {
+    dispatch({ type: "SET_IMAGE_POPUP", payload: src });
   }
 
   const reactions = msg.reactions || {};
@@ -129,12 +121,12 @@ export default function MessageItem({ msg, onReply }) {
 
   return (
     <div className="message" data-msg-id={msg.id}>
-      <div className="msg-avatar" style={{ backgroundColor: senderColor }}>
+      <div className="msg-avatar" style={{ backgroundColor: senderColor }} onClick={openProfile}>
         {msg.sender.charAt(0).toUpperCase()}
       </div>
       <div className="msg-body">
         <div className="msg-header">
-          <span className="msg-sender" style={{ color: senderColor }}>{msg.sender}</span>
+          <span className="msg-sender" style={{ color: senderColor }} onClick={openProfile}>{msg.sender}</span>
           <span className="msg-timestamp">{formatTime(msg.timestamp)}</span>
           {msg.editedAt && <span className="msg-timestamp msg-edited">(edited)</span>}
         </div>
@@ -146,21 +138,15 @@ export default function MessageItem({ msg, onReply }) {
         )}
         {editing ? (
           <div className="msg-edit-box">
-            <input
-              ref={editRef}
-              type="text"
-              className="msg-edit-input"
-              value={editContent}
-              onChange={e => setEditContent(e.target.value)}
-              onKeyDown={handleEditKey}
-            />
+            <input ref={editRef} type="text" className="msg-edit-input" value={editContent}
+              onChange={e => setEditContent(e.target.value)} onKeyDown={handleEditKey} />
             <div className="msg-edit-actions">
               <span className="msg-edit-hint">Esc to cancel &middot; Enter to save</span>
             </div>
           </div>
         ) : (
           <div className="msg-content">
-            {msg.content && msg.content !== " " && msg.content}
+            {msg.content && msg.content !== " " && (query ? highlightText(msg.content, query) : msg.content)}
           </div>
         )}
         {attachments.length > 0 && (
@@ -168,7 +154,7 @@ export default function MessageItem({ msg, onReply }) {
             {attachments.map((att, i) => (
               <div key={i} className="msg-attachment">
                 {att.type === "image" || isImageUrl(att.url) ? (
-                  <img src={att.url} alt={att.name} className="msg-image" />
+                  <img src={att.url} alt={att.name} className="msg-image" onClick={() => openImage(att.url)} />
                 ) : att.type === "video" ? (
                   <video src={att.url} controls className="msg-video" />
                 ) : (
@@ -204,7 +190,6 @@ export default function MessageItem({ msg, onReply }) {
           </>
         )}
       </div>
-
       {showReactionPicker && (
         <div className="quick-reactions">
           {["\uD83D\uDC4D", "\uD83D\uDC4E", "\u2764\uFE0F", "\uD83D\uDE02", "\uD83D\uDE0E", "\uD83D\uDE21", "\uD83D\uDE0A", "\uD83D\uDE28"].map(emoji => (
