@@ -470,22 +470,14 @@ export default function MainPage() {
       {serverSettings && <Suspense fallback={null}><ServerSettingsPanel server={serverSettings} onClose={() => setServerSettings(null)} /></Suspense>}
       {voiceSettingsOpen && <Suspense fallback={null}><VoiceSettingsPanel onClose={() => setVoiceSettingsOpen(false)} /></Suspense>}
       {callOpen && (
-<<<<<<< HEAD
-        <CallContainer
-          onClose={() => { setCallOpen(false); setCallTarget(null); }}
-          channelName={getCallChannel()}
-          incomingFrom={callTarget?.incomingFrom || null}
-          callerId={callTarget?.callerId || null}
-        />
-=======
         <Suspense fallback={null}>
           <CallContainer
             onClose={() => { setCallOpen(false); setCallTarget(null); }}
             channelName={getCallChannel()}
             incomingFrom={callTarget?.incomingFrom || null}
+            callerId={callTarget?.callerId || null}
           />
         </Suspense>
->>>>>>> 04d2317fe2d090a787bd60a875e264e9fccb82d5
       )}
       {miningOpen && <Suspense fallback={null}><MiningGame onClose={() => setMiningOpen(false)} /></Suspense>}
 
