@@ -51,7 +51,7 @@ function highlightText(text, query) {
   );
 }
 
-export default function MessageItem({ msg, onReply }) {
+export default React.memo(function MessageItem({ msg, onReply }) {
   const { state, dispatch, addToast } = useApp();
   const isMe = msg.sender === state.displayName;
   const senderColor = getSenderColor(msg.sender, state.msgColor);
@@ -199,4 +199,4 @@ export default function MessageItem({ msg, onReply }) {
       )}
     </div>
   );
-}
+});

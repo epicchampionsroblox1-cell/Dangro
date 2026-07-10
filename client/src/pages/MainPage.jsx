@@ -1,19 +1,20 @@
-import React from "react";
-import { useApp } from "../contexts/AppContext";
+import React, { useMemo, Suspense, lazy } from "react";
+import { useApp, getActiveChatKey } from "../contexts/AppContext";
 import socket from "../services/socket";
 import { api } from "../services/api";
 import FriendActivity from "../components/FriendActivity";
 import GamingHub from "../components/GamingHub";
-import MiningGame from "../components/MiningGame";
 import ChatPanel from "../components/ChatPanel";
-import SettingsPanel from "../components/SettingsPanel";
-import ServerSettingsPanel from "../components/ServerSettingsPanel";
-import VoiceSettingsPanel from "../components/VoiceSettingsPanel";
 import ToastContainer from "../components/ToastContainer";
-import CallContainer from "../components/CallContainer";
-import ImagePopup from "../components/ImagePopup";
-import UserProfile from "../components/UserProfile";
 import Clock from "../components/Clock";
+
+const SettingsPanel = lazy(() => import("../components/SettingsPanel"));
+const ServerSettingsPanel = lazy(() => import("../components/ServerSettingsPanel"));
+const VoiceSettingsPanel = lazy(() => import("../components/VoiceSettingsPanel"));
+const CallContainer = lazy(() => import("../components/CallContainer"));
+const ImagePopup = lazy(() => import("../components/ImagePopup"));
+const UserProfile = lazy(() => import("../components/UserProfile"));
+const MiningGame = lazy(() => import("../components/MiningGame"));
 
 const AVATARS = ["#007aff", "#34c759", "#ff3b30", "#ffcc00", "#af52de", "#ff9500", "#5ac8fa", "#ff2d55"];
 const SERVER_COLORS = ["#007aff", "#34c759", "#ff3b30", "#ffcc00", "#af52de", "#ff9500", "#5ac8fa", "#ff2d55"];
@@ -176,7 +177,24 @@ export default function MainPage() {
   const textChannels = currentServer?.channels?.filter(c => c.type !== "voice") || [];
   const voiceChannels = currentServer?.channels?.filter(c => c.type === "voice") || [];
 
-  const unreadCount = state.friends.length;
+  const unreadCount = useMemo(() => {
+    const activeKey = getActiveChatKey(state);
+    let total = 0;
+    for (const [chatKey, msgs] of Object.entries(state.messages)) {
+      if (chatKey === activeKey) continue;
+      if (!Array.isArray(msgs) || msgs.length === 0) continue;
+      if (chatKey.startsWith("call_")) continue;
+      const lastRead = state.lastReadTimestamps[chatKey];
+      if (lastRead) {
+        const count = msgs.filter(m => !m.senderId || m.senderId !== state.user?.id).filter(m => new Date(m.timestamp) > new Date(lastRead)).length;
+        total += count;
+      } else {
+        const count = msgs.filter(m => !m.senderId || m.senderId !== state.user?.id).length;
+        if (count > 0) total += count;
+      }
+    }
+    return total;
+  }, [state.messages, state.lastReadTimestamps, state.activeChatType, state.activeDmFriendId, state.activeChannelId, state.user?.id]);
 
   return (
     <>
@@ -227,6 +245,7 @@ export default function MainPage() {
             {state.activeNavTab === "friends" && (
               <>
                 <FriendActivity />
+                <GamingHub onStartMining={() => setMiningOpen(true)} />
               </>
             )}
 
@@ -386,12 +405,16 @@ export default function MainPage() {
 
       {/* IMAGE POPUP */}
       {state.imagePopup && (
-        <ImagePopup src={state.imagePopup} onClose={() => dispatch({ type: "SET_IMAGE_POPUP", payload: null })} />
+        <Suspense fallback={null}>
+          <ImagePopup src={state.imagePopup} onClose={() => dispatch({ type: "SET_IMAGE_POPUP", payload: null })} />
+        </Suspense>
       )}
 
       {/* USER PROFILE */}
       {state.profileModalUser && (
-        <UserProfile userId={state.profileModalUser} onClose={() => dispatch({ type: "SET_PROFILE_MODAL", payload: null })} />
+        <Suspense fallback={null}>
+          <UserProfile userId={state.profileModalUser} onClose={() => dispatch({ type: "SET_PROFILE_MODAL", payload: null })} />
+        </Suspense>
       )}
 
       {/* INCOMING CALL */}
@@ -442,17 +465,19 @@ export default function MainPage() {
 
       {/* MODALS */}
       <ToastContainer />
-      {settingsOpen && <SettingsPanel onClose={() => setSettingsOpen(false)} />}
-      {serverSettings && <ServerSettingsPanel server={serverSettings} onClose={() => setServerSettings(null)} />}
-      {voiceSettingsOpen && <VoiceSettingsPanel onClose={() => setVoiceSettingsOpen(false)} />}
+      {settingsOpen && <Suspense fallback={null}><SettingsPanel onClose={() => setSettingsOpen(false)} /></Suspense>}
+      {serverSettings && <Suspense fallback={null}><ServerSettingsPanel server={serverSettings} onClose={() => setServerSettings(null)} /></Suspense>}
+      {voiceSettingsOpen && <Suspense fallback={null}><VoiceSettingsPanel onClose={() => setVoiceSettingsOpen(false)} /></Suspense>}
       {callOpen && (
-        <CallContainer
-          onClose={() => { setCallOpen(false); setCallTarget(null); }}
-          channelName={getCallChannel()}
-          incomingFrom={callTarget?.incomingFrom || null}
-        />
+        <Suspense fallback={null}>
+          <CallContainer
+            onClose={() => { setCallOpen(false); setCallTarget(null); }}
+            channelName={getCallChannel()}
+            incomingFrom={callTarget?.incomingFrom || null}
+          />
+        </Suspense>
       )}
-      {miningOpen && <MiningGame onClose={() => setMiningOpen(false)} />}
+      {miningOpen && <Suspense fallback={null}><MiningGame onClose={() => setMiningOpen(false)} /></Suspense>}
 
       {showServerModal && (
         <div className="modal-overlay" onClick={() => setShowServerModal(false)}>

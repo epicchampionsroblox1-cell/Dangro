@@ -317,6 +317,14 @@ export function AppProvider({ children }) {
     socket.emit("message:send", { chatKey, sender: s.displayName, content, isImage, replyTo, attachments });
   }, []);
 
+  // Mark chat as read when active chat changes
+  useEffect(() => {
+    const key = getActiveChatKey(stateRef.current);
+    if (key) {
+      dispatch({ type: "SET_LAST_READ", chatKey: key, payload: new Date().toISOString() });
+    }
+  }, [state.activeChatType, state.activeDmFriendId, state.activeChannelId, state.activeServerId]);
+
   const addToast = useCallback((message, type = "info") => {
     const id = Date.now();
     dispatch({ type: "ADD_TOAST", payload: { id, message, type } });

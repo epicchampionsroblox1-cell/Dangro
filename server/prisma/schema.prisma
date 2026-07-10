@@ -74,6 +74,7 @@ model Server {
   icon       String   @default("D")
   ownerId    String   @map("owner_id")
   coOwnerIds String   @default("[]") @map("co_owner_ids")
+  bannedIds  String   @default("[]") @map("banned_ids")
   inviteCode String?  @unique @map("invite_code")
   isPublic   Boolean  @default(true) @map("is_public")
   createdAt  DateTime @default(now()) @map("created_at")
