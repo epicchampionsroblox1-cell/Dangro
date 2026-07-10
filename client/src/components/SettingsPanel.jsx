@@ -6,9 +6,29 @@ const SETTINGS_TABS = [
   { id: "profile", label: "Profile", icon: "\uD83D\uDC64" },
   { id: "account", label: "Account", icon: "\uD83D\uDD12" },
   { id: "appearance", label: "Appearance", icon: "\uD83C\uDFA8" },
+  { id: "themes", label: "Themes", icon: "\uD83C\uDFA8" },
+  { id: "messages", label: "Messages", icon: "\uD83D\uDCAC" },
   { id: "notifications", label: "Notifications", icon: "\uD83D\uDD14" },
   { id: "privacy", label: "Privacy", icon: "\uD83D\uDD75" },
   { id: "shortcuts", label: "Shortcuts", icon: "\u2328\uFE0F" },
+];
+
+const COLOR_PRESETS = [
+  "#5865f2", "#3ba55d", "#ed4245", "#f0b232",
+  "#a855f7", "#22d3ee", "#eb459e", "#57f287",
+  "#ff6b6b", "#ffa94d", "#ffd43b", "#69db7c",
+  "#4dabf7", "#9775fa", "#f783ac", "#20c997",
+];
+
+const THEMES = [
+  { id: "dark", name: "Dark", primary: "#313338", secondary: "#2b2d31", accent: "#5865f2" },
+  { id: "light", name: "Light", primary: "#ffffff", secondary: "#f2f3f5", accent: "#5865f2" },
+  { id: "midnight", name: "Midnight", primary: "#0d1117", secondary: "#161b22", accent: "#58a6ff" },
+  { id: "oled", name: "OLED Black", primary: "#000000", secondary: "#0a0a0a", accent: "#bb86fc" },
+  { id: "forest", name: "Forest", primary: "#1a2e1a", secondary: "#243824", accent: "#4ade80" },
+  { id: "sunset", name: "Sunset", primary: "#2d1b1b", secondary: "#3d2525", accent: "#f97316" },
+  { id: "ocean", name: "Ocean", primary: "#0c1a2e", secondary: "#142640", accent: "#38bdf8" },
+  { id: "coffee", name: "Coffee", primary: "#2c1810", secondary: "#3e2218", accent: "#c4a882" },
 ];
 
 export default function SettingsPanel({ onClose }) {
@@ -22,6 +42,7 @@ export default function SettingsPanel({ onClose }) {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [theme, setTheme] = useState("dark");
+  const [msgColor, setMsgColor] = useState(state.msgColor || "#5865f2");
   const [notifyMessages, setNotifyMessages] = useState(true);
   const [notifyFriends, setNotifyFriends] = useState(true);
   const [notifySounds, setNotifySounds] = useState(true);
@@ -38,8 +59,29 @@ export default function SettingsPanel({ onClose }) {
   useEffect(() => {
     const savedTheme = localStorage.getItem("dangro_theme") || "dark";
     setTheme(savedTheme);
-    document.documentElement.setAttribute("data-theme", savedTheme === "light" ? "light" : "");
+    applyTheme(savedTheme);
   }, []);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("dangro_msg_color") || "#5865f2";
+    setMsgColor(saved);
+  }, []);
+
+  function applyTheme(themeId) {
+    const t = THEMES.find(th => th.id === themeId);
+    if (!t) return;
+    const root = document.documentElement;
+    if (themeId === "light") {
+      root.setAttribute("data-theme", "light");
+    } else if (themeId === "dark") {
+      root.removeAttribute("data-theme");
+    } else {
+      root.setAttribute("data-theme", themeId);
+      root.style.setProperty("--bg-primary", t.primary);
+      root.style.setProperty("--bg-secondary", t.secondary);
+      root.style.setProperty("--accent", t.accent);
+    }
+  }
 
   function handleFileUpload(e) {
     const file = e.target.files?.[0];
@@ -101,8 +143,14 @@ export default function SettingsPanel({ onClose }) {
 
   function handleThemeChange(newTheme) {
     setTheme(newTheme);
-    document.documentElement.setAttribute("data-theme", newTheme === "light" ? "light" : "");
+    applyTheme(newTheme);
     localStorage.setItem("dangro_theme", newTheme);
+  }
+
+  function handleMsgColorChange(color) {
+    setMsgColor(color);
+    localStorage.setItem("dangro_msg_color", color);
+    dispatch({ type: "SET_PROFILE", payload: { msgColor: color } });
   }
 
   return (
@@ -193,16 +241,81 @@ export default function SettingsPanel({ onClose }) {
 
             {tab === "appearance" && (
               <div className="settings-section">
-                <h3>Appearance</h3>
-                <div className="settings-theme-options">
-                  <button className={"settings-theme-card" + (theme === "dark" ? " active" : "")} onClick={() => handleThemeChange("dark")}>
-                    <div className="settings-theme-preview dark" />
-                    <span>Dark</span>
-                  </button>
-                  <button className={"settings-theme-card" + (theme === "light" ? " active" : "")} onClick={() => handleThemeChange("light")}>
-                    <div className="settings-theme-preview light" />
-                    <span>Light</span>
-                  </button>
+                <h3>Chat Appearance</h3>
+                <div className="settings-theme-options" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                  {THEMES.map(t => (
+                    <button
+                      key={t.id}
+                      className={"settings-theme-card" + (theme === t.id ? " active" : "")}
+                      onClick={() => handleThemeChange(t.id)}
+                      style={{ border: theme === t.id ? "2px solid var(--accent)" : "2px solid var(--border-color)" }}
+                    >
+                      <div className="settings-theme-preview" style={{
+                        background: t.id === "light"
+                          ? "linear-gradient(135deg, #ffffff 50%, #e3e5e8 50%)"
+                          : `linear-gradient(135deg, ${t.primary} 50%, ${t.secondary} 50%)`,
+                      }} />
+                      <span>{t.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {tab === "themes" && (
+              <div className="settings-section">
+                <h3>Color Themes</h3>
+                <p style={{ color: "var(--text-muted)", fontSize: 12, marginBottom: 12 }}>
+                  Choose from preset themes or customize your own colors.
+                </p>
+                <div className="settings-field">
+                  <label>Accent Color</label>
+                  <input type="color" className="settings-color-input" value={theme === "dark" ? "#5865f2" : theme === "light" ? "#5865f2" : "#58a6ff"}
+                    onChange={e => {
+                      document.documentElement.style.setProperty("--accent", e.target.value);
+                      localStorage.setItem("dangro_accent", e.target.value);
+                    }} />
+                </div>
+                <div className="settings-field">
+                  <label>Background Intensity</label>
+                  <input type="range" className="settings-slider" min="0" max="100" defaultValue={50}
+                    onChange={e => {
+                      const v = e.target.value;
+                      document.documentElement.style.setProperty("--bg-dim", v + "%");
+                    }} />
+                </div>
+              </div>
+            )}
+
+            {tab === "messages" && (
+              <div className="settings-section">
+                <h3>Message Appearance</h3>
+                <div className="settings-field">
+                  <label>Your Message Color</label>
+                  <div className="msg-color-picker">
+                    <input type="color" className="settings-color-input" value={msgColor} onChange={e => handleMsgColorChange(e.target.value)} />
+                    <span className="msg-color-preview" style={{
+                      background: msgColor,
+                      width: 32, height: 32, borderRadius: 8, display: "inline-block", verticalAlign: "middle", marginLeft: 8, border: "1px solid var(--border-color)"
+                    }} />
+                    <span className="msg-color-hex" style={{ marginLeft: 8, fontSize: 12, color: "var(--text-muted)" }}>{msgColor}</span>
+                  </div>
+                </div>
+                <p style={{ color: "var(--text-muted)", fontSize: 12, marginTop: 8 }}>
+                  This color will be used for your username in messages. If someone else has the same color, theirs will shift slightly.
+                </p>
+                <div className="settings-field" style={{ marginTop: 16 }}>
+                  <label>Quick Colors</label>
+                  <div className="msg-color-presets">
+                    {COLOR_PRESETS.map(color => (
+                      <button
+                        key={color}
+                        className={"msg-color-preset" + (msgColor === color ? " active" : "")}
+                        style={{ background: color }}
+                        onClick={() => handleMsgColorChange(color)}
+                      />
+                    ))}
+                  </div>
                 </div>
               </div>
             )}

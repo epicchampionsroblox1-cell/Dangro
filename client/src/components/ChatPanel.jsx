@@ -7,7 +7,7 @@ import EmojiPicker from "./EmojiPicker";
 
 const ACCEPTED_TYPES = "image/*,video/mp4,video/webm,application/pdf,.txt,.zip,.rar";
 
-export default function ChatPanel() {
+export default function ChatPanel({ onStartCall, mobileChat, onMobileBack }) {
   const { state, dispatch, loadMessages, sendMessage, addToast } = useApp();
   const [input, setInput] = useState("");
   const [replyTarget, setReplyTarget] = useState(null);
@@ -20,6 +20,7 @@ export default function ChatPanel() {
   const inputRef = useRef(null);
   const scrollRef = useRef(null);
   const fileInputRef = useRef(null);
+  const prevMessageCount = useRef(0);
   const chatKey = getActiveChatKey(state);
   const messages = state.messages[chatKey] || [];
   const query = state.chatSearchQuery.trim().toLowerCase();
@@ -41,7 +42,10 @@ export default function ChatPanel() {
   }, [chatKey, loadMessages]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (filtered.length > prevMessageCount.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+    prevMessageCount.current = filtered.length;
   }, [filtered.length]);
 
   const handleScroll = useCallback(() => {
@@ -137,7 +141,7 @@ export default function ChatPanel() {
       return { prefix: "#", name: channel?.name || "general", desc: channel ? "Text channel in " + server?.name : "" };
     } else if (state.activeChatType === "dm") {
       const friend = state.friends.find(f => f.id === state.activeDmFriendId);
-      return { prefix: "@", name: friend?.username || "User", desc: "" };
+      return { prefix: "@", name: friend?.username || "User", desc: friend?.customStatus || "" };
     } else if (state.activeChatType === "group") {
       const group = state.groupChats.find(g => g.id === state.activeGroupChatId);
       return { prefix: "\uD83D\uDCE2", name: group?.name || "Group", desc: group ? group.members?.length + " members" : "" };
@@ -151,7 +155,7 @@ export default function ChatPanel() {
     return (
       <div className="chat-area">
         <div className="empty-state" style={{ height: "100%" }}>
-          <div className="empty-state-icon">\uD83D\uDCAC</div>
+          <div className="empty-state-icon" style={{ fontSize: 48, marginBottom: 16 }}>{"\uD83D\uDCAC"}</div>
           <div className="empty-state-title">Select a conversation</div>
           <div className="empty-state-desc">Choose a channel or friend from the sidebar to start chatting.</div>
         </div>
@@ -161,18 +165,20 @@ export default function ChatPanel() {
 
   return (
     <div
-      className={"chat-area" + (dragOver ? " drag-over" : "")}
+      className={"chat-area" + (dragOver ? " drag-over" : "") + (mobileChat ? " active-mobile" : "")}
       onDrop={handleDrop}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
     >
       <div className="chat-header">
         <div className="chat-header-left">
+          {mobileChat && <button className="chat-mobile-back" onClick={onMobileBack}>←</button>}
           <span className="chat-header-hash">{info.prefix}</span>
           <span className="chat-header-name">{info.name}</span>
           {info.desc && <span className="chat-header-desc">{info.desc}</span>}
         </div>
         <div className="chat-header-actions">
+          <button className="chat-header-btn" onClick={onStartCall} title="Voice Call">&#128222;</button>
           <div className="chat-search">
             <input type="text" placeholder="Search" value={state.chatSearchQuery}
               onChange={e => dispatch({ type: "SET_CHAT_SEARCH", payload: e.target.value })} />
@@ -189,7 +195,7 @@ export default function ChatPanel() {
         )}
         {filtered.length === 0 && !loading ? (
           <div className="empty-state" style={{ height: "100%" }}>
-            <div className="empty-state-icon">{query ? "\uD83D\uDD0D" : "\uD83D\uDCAC"}</div>
+            <div className="empty-state-icon" style={{ fontSize: 48, marginBottom: 16 }}>{query ? "\uD83D\uDD0D" : "\uD83D\uDCAC"}</div>
             <div className="empty-state-title">{query ? "No results" : "No messages yet"}</div>
             <div className="empty-state-desc">
               {query ? "No messages match your search." : "Send a message to start the conversation."}

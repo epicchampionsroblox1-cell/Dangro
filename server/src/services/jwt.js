@@ -15,10 +15,10 @@ export function generateAccessToken(user) {
   );
 }
 
-export function generateRefreshToken(user) {
+export async function generateRefreshToken(user) {
   const token = uuidv4();
   const expiresAt = new Date(Date.now() + parseDuration(JWT_REFRESH_EXPIRES_IN)).toISOString();
-  TokenRepository.create(user.id, token, expiresAt);
+  await TokenRepository.create(user.id, token, expiresAt);
   return token;
 }
 

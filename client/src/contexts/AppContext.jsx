@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useReducer, useCallback, useEffect, useRef } from "react";
 import { useLocalStorage } from "../hooks/useLocalStorage";
 import socket, { reconnectSocket } from "../services/socket";
-import { api, setTokens, clearTokens, getAccessToken } from "../services/api";
+import { api, setTokens, clearTokens, getAccessToken, setRememberMe } from "../services/api";
 
 const initialState = {
   user: null,
@@ -10,13 +10,13 @@ const initialState = {
   groupChats: [],
   messages: {},
   messageCursors: {},
-  activeChatType: "channel",
+  activeChatType: null,
   activeServerId: null,
   activeChannelId: null,
   activeDmFriendId: null,
   activeGroupChatId: null,
-  activeNavTab: "dms",
-  activeFriendSubtab: "online",
+  activeNavTab: "friends",
+  activeFriendSubtab: "all",
   displayName: "You",
   bio: "",
   status: "online",
@@ -24,6 +24,7 @@ const initialState = {
   profilePic: "",
   friendSearchQuery: "",
   chatSearchQuery: "",
+  msgColor: "#5865f2",
   toasts: [],
   rememberMe: false,
   uploadProgress: null,
@@ -42,10 +43,9 @@ function reducer(state, action) {
       return { ...state, groupChats: action.payload };
     case "SET_MESSAGES":
       return { ...state, messages: { ...state.messages, [action.chatKey]: action.payload } };
-    case "SET_MESSAGES_BATCH":
+    case "SET_CURSORS":
       return {
         ...state,
-        messages: { ...state.messages, [action.chatKey]: [...(action.prepend ? action.payload : []), ...(state.messages[action.chatKey] || []), ...(action.prepend ? [] : action.payload)] },
         messageCursors: { ...state.messageCursors, [action.chatKey]: { ...state.messageCursors[action.chatKey], ...action.cursors } },
       };
     case "PREPEND_MESSAGES":
@@ -128,6 +128,13 @@ export function AppProvider({ children }) {
   }, [state]);
 
   useEffect(() => {
+    const savedTheme = localStorage.getItem("dangro_theme") || "dark";
+    const savedMsgColor = localStorage.getItem("dangro_msg_color") || "#5865f2";
+    if (savedTheme !== "dark") {
+      document.documentElement.setAttribute("data-theme", savedTheme);
+    }
+    dispatch({ type: "SET_PROFILE", payload: { msgColor: savedMsgColor } });
+
     const token = getAccessToken();
     if (token && !state.user) {
       api.auth.me().then(data => {
@@ -158,40 +165,44 @@ export function AppProvider({ children }) {
 
   useEffect(() => {
     socket.on("message:new", (msg) => {
-      const chatKey = getActiveChatKey(stateRef.current);
-      dispatch({ type: "ADD_MESSAGE", chatKey: msg.chatKey || chatKey, payload: msg });
+      dispatch({ type: "ADD_MESSAGE", chatKey: msg.chatKey, payload: msg });
+    });
+
+    socket.on("message:sent", (msg) => {
+      const ck = msg.chatKey;
+      const msgs = stateRef.current.messages[ck] || [];
+      const myId = stateRef.current.user?.id;
+      const optIdx = msgs.findIndex(m => m.id.startsWith("opt_") && (m.senderId === myId || m.sender === msg.sender));
+      if (optIdx >= 0) {
+        dispatch({ type: "REMOVE_MESSAGE", chatKey: ck, payload: msgs[optIdx].id });
+      }
+      dispatch({ type: "ADD_MESSAGE", chatKey: ck, payload: msg });
     });
 
     socket.on("message:updated", (data) => {
-      const chatKey = getActiveChatKey(stateRef.current);
-      const msgs = stateRef.current.messages[chatKey] || [];
-      const idx = msgs.findIndex(m => m.id === data.messageId);
-      if (idx >= 0) {
-        dispatch({ type: "UPDATE_MESSAGE", chatKey, payload: { id: data.messageId, ...data } });
-      }
+      if (!data.chatKey) return;
+      dispatch({ type: "UPDATE_MESSAGE", chatKey: data.chatKey, payload: { id: data.messageId, ...data } });
     });
 
     socket.on("message:deleted", (data) => {
-      const chatKey = getActiveChatKey(stateRef.current);
-      const msgs = stateRef.current.messages[chatKey] || [];
-      if (msgs.find(m => m.id === data.messageId)) {
-        dispatch({ type: "REMOVE_MESSAGE", chatKey, payload: data.messageId });
-      }
+      if (!data.chatKey) return;
+      dispatch({ type: "REMOVE_MESSAGE", chatKey: data.chatKey, payload: data.messageId });
     });
 
     socket.on("typing:update", (data) => {
-      const chatKey = getActiveChatKey(stateRef.current);
-      dispatch({ type: "SET_TYPING", chatKey, payload: data });
+      if (!data.chatKey) return;
+      dispatch({ type: "SET_TYPING", chatKey: data.chatKey, payload: data });
     });
 
     socket.on("presence:update", (data) => {
       dispatch({ type: "SET_FRIENDS", payload: stateRef.current.friends.map(f =>
-        f.id === data.userId ? { ...f, status: data.status } : f
+        f.userId === data.userId ? { ...f, status: data.status } : f
       )});
     });
 
     return () => {
       socket.off("message:new");
+      socket.off("message:sent");
       socket.off("message:updated");
       socket.off("message:deleted");
       socket.off("typing:update");
@@ -201,6 +212,7 @@ export function AppProvider({ children }) {
 
   const login = useCallback(async (username, password, rememberMe = false) => {
     const result = await api.auth.login(username, password, rememberMe);
+    setRememberMe(rememberMe);
     setTokens(result.accessToken, result.refreshToken);
     const u = result.user;
     dispatch({ type: "SET_USER", payload: { id: u.id, username: u.username, email: u.email } });
@@ -248,10 +260,8 @@ export function AppProvider({ children }) {
         dispatch({ type: "SET_MESSAGES", chatKey, payload: result.messages });
       }
       dispatch({
-        type: "SET_MESSAGES_BATCH",
+        type: "SET_CURSORS",
         chatKey,
-        payload: result.messages,
-        prepend: !!options.before,
         cursors: { hasMore: result.hasMore, nextCursor: result.nextCursor, total: result.total },
       });
       return result;
@@ -268,6 +278,7 @@ export function AppProvider({ children }) {
       id: optimisticId,
       chatKey,
       sender: s.displayName,
+      senderId: s.user?.id,
       content,
       timestamp: new Date().toISOString(),
       isImage,

@@ -13,12 +13,12 @@ function ensureSsl(url) {
 
 process.env.DATABASE_URL = ensureSsl(process.env.DATABASE_URL);
 
-console.log("[start] Running database migrations...");
+console.log("[start] Running database push...");
 try {
-  execSync("npx prisma migrate deploy", { stdio: "inherit", cwd: process.cwd() });
-  console.log("[start] Migrations complete");
+  execSync("npx prisma db push --accept-data-loss", { stdio: "inherit", cwd: process.cwd() });
+  console.log("[start] Database sync complete");
 } catch (err) {
-  console.error("[start] Migration failed:", err.message);
+  console.error("[start] Database sync failed:", err.message);
   process.exit(1);
 }
 

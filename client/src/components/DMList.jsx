@@ -72,6 +72,25 @@ export default function DMList() {
     }
   }
 
+  async function acceptRequest(friend) {
+    try {
+      await api.friends.update(friend.id, { status: "accepted" });
+      const friends = await api.friends.list();
+      dispatch({ type: "SET_FRIENDS", payload: friends });
+      addToast("Accepted @" + friend.username + "'s request!", "success");
+    } catch (e) {
+      addToast("Failed to accept request", "error");
+    }
+  }
+
+  async function declineRequest(friend) {
+    try {
+      await api.friends.remove(friend.id);
+      dispatch({ type: "SET_FRIENDS", payload: state.friends.filter(f => f.id !== friend.id) });
+      addToast("Declined request from @" + friend.username, "info");
+    } catch {}
+  }
+
   let visibleFriends = state.friends;
   if (state.activeFriendSubtab === "online") {
     visibleFriends = state.friends.filter(f => f.status !== "offline" && f.status !== "pending_in" && f.status !== "pending_out");
@@ -143,7 +162,7 @@ export default function DMList() {
           pendingFriends.map(friend => {
             const isIncoming = friend.status === "pending_in";
             return (
-              <div key={friend.id} className="dm-item">
+              <div key={friend.id} className="dm-item" style={{ cursor: "default" }}>
                 <div className="dm-avatar" style={{ backgroundColor: hashColor(friend.username) }}>
                   {friend.username.charAt(0).toUpperCase()}
                 </div>
@@ -153,20 +172,17 @@ export default function DMList() {
                     {isIncoming ? "Incoming Request" : "Outgoing Request"}
                   </div>
                 </div>
-                {isIncoming && (
-                  <button style={{ background: "var(--accent-green)", border: "none", color: "#fff", borderRadius: 4, padding: "4px 8px", fontSize: 11, cursor: "pointer", fontWeight: 600 }}
-                    onClick={async () => {
-                      await api.friends.update(friend.id, { status: "accepted" });
-                      const friends = await api.friends.list();
-                      dispatch({ type: "SET_FRIENDS", payload: friends });
-                      addToast("Accepted @" + friend.username + "'s request!", "success");
-                    }}>Accept</button>
-                )}
-                <button style={{ background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 12, padding: 2 }}
-                  onClick={async () => {
-                    await api.friends.remove(friend.id);
-                    dispatch({ type: "SET_FRIENDS", payload: state.friends.filter(f => f.id !== friend.id) });
-                  }}>&#10005;</button>
+                <div className="dm-item-actions">
+                  {isIncoming && (
+                    <>
+                      <button className="dm-action-btn accept" onClick={() => acceptRequest(friend)} title="Accept">&#10003;</button>
+                      <button className="dm-action-btn decline" onClick={() => declineRequest(friend)} title="Decline">&#10005;</button>
+                    </>
+                  )}
+                  {!isIncoming && (
+                    <button className="dm-action-btn decline" onClick={() => declineRequest(friend)} title="Cancel Request">&#10005;</button>
+                  )}
+                </div>
               </div>
             );
           })
@@ -179,13 +195,16 @@ export default function DMList() {
           <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 8 }}>Enter a username to send a friend request.</p>
           <div className="dm-add-form">
             <input type="text" id="add-friend-input" placeholder="Enter username..." autoComplete="off" />
-            <button onClick={addFriend}>Send</button>
+            <button onClick={addFriend}>Send Request</button>
           </div>
           {feedback.message && (
-            <div style={{ marginTop: 8, fontSize: 12, color: feedback.type === "success" ? "var(--green)" : "var(--red)" }}>
+            <div className={"dm-feedback " + feedback.type}>
               {feedback.message}
             </div>
           )}
+          <div className="dm-add-info">
+            <p>Friend requests can only be sent if both users share a server or the recipient has DMs enabled.</p>
+          </div>
         </div>
       )}
     </div>

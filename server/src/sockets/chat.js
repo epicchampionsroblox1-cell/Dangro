@@ -1,13 +1,17 @@
 import { prisma } from "../database/init.js";
 
-const onlineUsers = new Map();
+const userSockets = new Map();
 const typingTimeouts = new Map();
 
 export function registerChatHandlers(io, socket) {
   const username = socket.username || "unknown";
   const userId = socket.userId;
 
-  onlineUsers.set(userId, { socketId: socket.id, username, userId, status: "online" });
+  if (!userSockets.has(userId)) {
+    userSockets.set(userId, new Map());
+  }
+  userSockets.get(userId).set(socket.id, { socketId: socket.id, username, userId, status: "online" });
+
   io.emit("presence:update", { userId, username, status: "online" });
 
   socket.on("join:chat", (chatKey) => {
@@ -31,6 +35,7 @@ export function registerChatHandlers(io, socket) {
           id,
           chatKey,
           sender,
+          senderId: userId,
           content,
           isImage: !!isImage,
           timestamp: new Date(),
@@ -43,10 +48,11 @@ export function registerChatHandlers(io, socket) {
       console.error("Socket message:send error:", err);
     }
 
-    io.to(chatKey).emit("message:new", {
+    const msgPayload = {
       id,
       chatKey,
       sender,
+      senderId: userId,
       content,
       timestamp: new Date().toISOString(),
       isImage: !!isImage,
@@ -55,7 +61,10 @@ export function registerChatHandlers(io, socket) {
       replyTo: replyTo || null,
       attachments: attachments || [],
       editedAt: null,
-    });
+    };
+
+    socket.to(chatKey).emit("message:new", msgPayload);
+    socket.emit("message:sent", msgPayload);
   });
 
   socket.on("message:edit", async (data) => {
@@ -71,8 +80,9 @@ export function registerChatHandlers(io, socket) {
         data: { content, editedAt: new Date() },
       });
 
-      io.to(socket.data.chatKey || "general").emit("message:updated", {
+      io.to(existing.chatKey).emit("message:updated", {
         messageId,
+        chatKey: existing.chatKey,
         content,
         editedAt: new Date().toISOString(),
       });
@@ -86,8 +96,11 @@ export function registerChatHandlers(io, socket) {
     if (!messageId) return;
 
     try {
+      const existing = await prisma.message.findUnique({ where: { id: messageId } });
+      if (!existing) return;
+
       await prisma.message.delete({ where: { id: messageId } });
-      io.to(socket.data.chatKey || "general").emit("message:deleted", { messageId });
+      io.to(existing.chatKey).emit("message:deleted", { messageId, chatKey: existing.chatKey });
     } catch (err) {
       console.error("Socket message:delete error:", err);
     }
@@ -98,6 +111,9 @@ export function registerChatHandlers(io, socket) {
     if (!messageId || !emoji || !username) return;
 
     try {
+      const msg = await prisma.message.findUnique({ where: { id: messageId } });
+      if (!msg) return;
+
       const existing = await prisma.reaction.findUnique({
         where: { messageId_emoji_username: { messageId, emoji, username } },
       });
@@ -122,7 +138,7 @@ export function registerChatHandlers(io, socket) {
         grouped[r.emoji].push(r.username);
       }
 
-      io.to(socket.data.chatKey || "general").emit("message:updated", { messageId, reactions: grouped });
+      io.to(msg.chatKey).emit("message:updated", { messageId, chatKey: msg.chatKey, reactions: grouped });
     } catch (err) {
       console.error("Socket message:react error:", err);
     }
@@ -130,19 +146,19 @@ export function registerChatHandlers(io, socket) {
 
   socket.on("typing:start", (data) => {
     const { chatKey, username } = data;
-    socket.to(chatKey).emit("typing:update", { username, isTyping: true });
+    socket.to(chatKey).emit("typing:update", { chatKey, username, isTyping: true });
 
     const key = chatKey + "_" + username;
     if (typingTimeouts.has(key)) clearTimeout(typingTimeouts.get(key));
     typingTimeouts.set(key, setTimeout(() => {
-      socket.to(chatKey).emit("typing:update", { username, isTyping: false });
+      socket.to(chatKey).emit("typing:update", { chatKey, username, isTyping: false });
       typingTimeouts.delete(key);
     }, 4000));
   });
 
   socket.on("typing:stop", (data) => {
     const { chatKey, username } = data;
-    socket.to(chatKey).emit("typing:update", { username, isTyping: false });
+    socket.to(chatKey).emit("typing:update", { chatKey, username, isTyping: false });
 
     const key = chatKey + "_" + username;
     if (typingTimeouts.has(key)) {
@@ -153,20 +169,113 @@ export function registerChatHandlers(io, socket) {
 
   socket.on("presence:status", (data) => {
     const { status } = data;
-    const user = onlineUsers.get(userId);
-    if (user) {
-      user.status = status;
-      onlineUsers.set(userId, user);
+    const sockets = userSockets.get(userId);
+    if (sockets) {
+      for (const s of sockets.values()) {
+        s.status = status;
+      }
     }
     io.emit("presence:update", { userId, username, status });
   });
 
+  socket.on("call:chat", ({ targetId, sender, content }) => {
+    const targetSockets = userSockets.get(targetId);
+    if (targetSockets) {
+      for (const s of targetSockets.values()) {
+        io.to(s.socketId).emit("call:chat", { sender, content });
+      }
+    }
+  });
+
+  // WebRTC Call Signaling
+  socket.on("call:start", ({ targetId, channelName }) => {
+    const targetSockets = userSockets.get(targetId);
+    if (targetSockets) {
+      for (const s of targetSockets.values()) {
+        io.to(s.socketId).emit("call:incoming", {
+          from: userId,
+          username,
+          channelName,
+        });
+      }
+    }
+  });
+
+  socket.on("call:accept", ({ targetId }) => {
+    const targetSockets = userSockets.get(targetId);
+    if (targetSockets) {
+      for (const s of targetSockets.values()) {
+        io.to(s.socketId).emit("call:accepted", { from: userId, username });
+      }
+    }
+    // Notify all other participants
+    io.to(socket.data.chatKey || "global").emit("call:participant-joined", { username });
+  });
+
+  socket.on("call:decline", ({ targetId }) => {
+    const targetSockets = userSockets.get(targetId);
+    if (targetSockets) {
+      for (const s of targetSockets.values()) {
+        io.to(s.socketId).emit("call:declined", { from: userId, username });
+      }
+    }
+  });
+
+  socket.on("call:end", ({ targetId }) => {
+    const targetSockets = userSockets.get(targetId);
+    if (targetSockets) {
+      for (const s of targetSockets.values()) {
+        io.to(s.socketId).emit("call:ended", { from: userId, username });
+      }
+    }
+    io.to(socket.data.chatKey || "global").emit("call:participant-left", { username });
+  });
+
+  // WebRTC signaling relay
+  socket.on("call:offer", ({ offer, to }) => {
+    const targetSockets = userSockets.get(to);
+    if (targetSockets) {
+      for (const s of targetSockets.values()) {
+        io.to(s.socketId).emit("call:offer", { offer, from: userId });
+      }
+    }
+  });
+
+  socket.on("call:answer", ({ answer, to }) => {
+    const targetSockets = userSockets.get(to);
+    if (targetSockets) {
+      for (const s of targetSockets.values()) {
+        io.to(s.socketId).emit("call:answer", { answer });
+      }
+    }
+  });
+
+  socket.on("call:ice-candidate", ({ candidate, to }) => {
+    const targetSockets = userSockets.get(to);
+    if (targetSockets) {
+      for (const s of targetSockets.values()) {
+        io.to(s.socketId).emit("call:ice-candidate", { candidate });
+      }
+    }
+  });
+
   socket.on("disconnect", () => {
-    onlineUsers.delete(userId);
-    io.emit("presence:update", { userId, username, status: "offline" });
+    const sockets = userSockets.get(userId);
+    if (sockets) {
+      sockets.delete(socket.id);
+      if (sockets.size === 0) {
+        userSockets.delete(userId);
+        io.emit("presence:update", { userId, username, status: "offline" });
+      }
+    }
   });
 }
 
 export function getOnlineUsers() {
-  return Array.from(onlineUsers.values());
+  const users = [];
+  for (const [userId, sockets] of userSockets) {
+    const first = sockets.values().next().value;
+    if (first) users.push(first);
+  }
+  return users;
 }

@@ -15,13 +15,13 @@ function sanitizeUser(user) {
     id: user.id,
     username: user.username,
     email: user.email,
-    displayName: user.display_name,
+    displayName: user.displayName,
     bio: user.bio,
     status: user.status,
-    customStatus: user.custom_status,
-    profilePic: user.profile_pic,
+    customStatus: user.customStatus,
+    profilePic: user.profilePic,
     theme: user.theme,
-    createdAt: user.created_at,
+    createdAt: user.createdAt,
   };
 }
 
@@ -45,13 +45,13 @@ authRouter.post("/signup", async (req, res) => {
       return res.status(400).json({ error: "Invalid email address" });
     }
 
-    const existingUser = UserRepository.findByUsername(username);
+    const existingUser = await UserRepository.findByUsername(username);
     if (existingUser) {
       return res.status(409).json({ error: "Username is already taken" });
     }
 
     if (email) {
-      const existingEmail = UserRepository.findByEmail(email);
+      const existingEmail = await UserRepository.findByEmail(email);
       if (existingEmail) {
         return res.status(409).json({ error: "Email is already registered" });
       }
@@ -59,7 +59,7 @@ authRouter.post("/signup", async (req, res) => {
 
     const user = await UserRepository.create({ username, email, password });
     const accessToken = generateAccessToken(user);
-    const refreshToken = generateRefreshToken(user);
+    const refreshToken = await generateRefreshToken(user);
 
     res.status(201).json({
       user: sanitizeUser(user),
@@ -79,8 +79,8 @@ authRouter.post("/login", async (req, res) => {
     if (!username || !password) {
       return res.status(400).json({ error: "Username and password are required" });
     }
+    const user = await UserRepository.findByUsername(username);
 
-    const user = UserRepository.findByUsername(username);
     if (!user) {
       return res.status(401).json({ error: "Invalid username or password" });
     }
@@ -91,7 +91,7 @@ authRouter.post("/login", async (req, res) => {
     }
 
     const accessToken = generateAccessToken(user);
-    const refreshToken = generateRefreshToken(user);
+    const refreshToken = await generateRefreshToken(user);
 
     res.json({
       user: sanitizeUser(user),
@@ -105,27 +105,27 @@ authRouter.post("/login", async (req, res) => {
   }
 });
 
-authRouter.post("/refresh", (req, res) => {
+authRouter.post("/refresh", async (req, res) => {
   try {
     const { refreshToken } = req.body;
     if (!refreshToken) {
       return res.status(400).json({ error: "Refresh token required" });
     }
 
-    const stored = TokenRepository.findByToken(refreshToken);
+    const stored = await TokenRepository.findByToken(refreshToken);
     if (!stored) {
       return res.status(401).json({ error: "Invalid or expired refresh token" });
     }
 
-    const user = UserRepository.findById(stored.user_id);
+    const user = await UserRepository.findById(stored.user_id);
     if (!user) {
-      TokenRepository.deleteByToken(refreshToken);
+      await TokenRepository.deleteByToken(refreshToken);
       return res.status(401).json({ error: "User not found" });
     }
 
-    TokenRepository.deleteByToken(refreshToken);
+    await TokenRepository.deleteByToken(refreshToken);
     const newAccessToken = generateAccessToken(user);
-    const newRefreshToken = generateRefreshToken(user);
+    const newRefreshToken = await generateRefreshToken(user);
 
     res.json({
       user: sanitizeUser(user),
@@ -138,13 +138,13 @@ authRouter.post("/refresh", (req, res) => {
   }
 });
 
-authRouter.post("/logout", authenticateToken, (req, res) => {
+authRouter.post("/logout", authenticateToken, async (req, res) => {
   try {
     const { refreshToken } = req.body;
     if (refreshToken) {
-      TokenRepository.deleteByToken(refreshToken);
+      await TokenRepository.deleteByToken(refreshToken);
     } else {
-      TokenRepository.deleteAllForUser(req.userId);
+      await TokenRepository.deleteAllForUser(req.userId);
     }
     res.json({ success: true });
   } catch (err) {
@@ -168,7 +168,7 @@ authRouter.put("/me", authenticateToken, async (req, res) => {
     if (profilePic !== undefined) updates.profile_pic = profilePic;
     if (theme !== undefined) updates.theme = theme;
 
-    const user = UserRepository.updateProfile(req.userId, updates);
+    const user = await UserRepository.updateProfile(req.userId, updates);
     res.json({ user: sanitizeUser(user) });
   } catch (err) {
     console.error("Profile update error:", err);
@@ -186,14 +186,14 @@ authRouter.put("/me/password", authenticateToken, async (req, res) => {
       return res.status(400).json({ error: "New password must be at least 6 characters" });
     }
 
-    const user = UserRepository.findById(req.userId);
+    const user = await UserRepository.findById(req.userId);
     const valid = await UserRepository.verifyPassword(user, currentPassword);
     if (!valid) {
       return res.status(401).json({ error: "Current password is incorrect" });
     }
 
     await UserRepository.updatePassword(req.userId, newPassword);
-    TokenRepository.deleteAllForUser(req.userId);
+    await TokenRepository.deleteAllForUser(req.userId);
 
     res.json({ success: true, message: "Password updated. Please log in again." });
   } catch (err) {
@@ -202,12 +202,12 @@ authRouter.put("/me/password", authenticateToken, async (req, res) => {
   }
 });
 
-authRouter.get("/users/search", authenticateToken, (req, res) => {
+authRouter.get("/users/search", authenticateToken, async (req, res) => {
   const { q } = req.query;
   if (!q || q.length < 1) {
     return res.json([]);
   }
-  const users = UserRepository.search(q, req.userId);
+    const users = await UserRepository.search(q, req.userId);
   res.json(users.map(u => ({
     id: u.id,
     username: u.username,

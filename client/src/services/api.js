@@ -1,16 +1,37 @@
-const BASE = import.meta.env.VITE_API_URL || "/api";
+const BASE = import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL + "/api" : "/api";
 
-let accessToken = localStorage.getItem("dangro_access_token");
-let refreshToken = localStorage.getItem("dangro_refresh_token");
+function getStorage() {
+  return localStorage.getItem("dangro_remember") === "true" ? localStorage : sessionStorage;
+}
+
+let accessToken = localStorage.getItem("dangro_access_token") || sessionStorage.getItem("dangro_access_token") || null;
+let refreshToken = localStorage.getItem("dangro_refresh_token") || sessionStorage.getItem("dangro_refresh_token") || null;
 let refreshPromise = null;
 
 export function setTokens(access, refresh) {
+  const storage = getStorage();
   accessToken = access;
   refreshToken = refresh;
-  if (access) localStorage.setItem("dangro_access_token", access);
-  else localStorage.removeItem("dangro_access_token");
-  if (refresh) localStorage.setItem("dangro_refresh_token", refresh);
-  else localStorage.removeItem("dangro_refresh_token");
+  if (access) {
+    storage.setItem("dangro_access_token", access);
+    const other = storage === localStorage ? sessionStorage : localStorage;
+    other.removeItem("dangro_access_token");
+  } else {
+    localStorage.removeItem("dangro_access_token");
+    sessionStorage.removeItem("dangro_access_token");
+  }
+  if (refresh) {
+    storage.setItem("dangro_refresh_token", refresh);
+    const other = storage === localStorage ? sessionStorage : localStorage;
+    other.removeItem("dangro_refresh_token");
+  } else {
+    localStorage.removeItem("dangro_refresh_token");
+    sessionStorage.removeItem("dangro_refresh_token");
+  }
+}
+
+export function setRememberMe(val) {
+  localStorage.setItem("dangro_remember", val ? "true" : "false");
 }
 
 export function clearTokens() {
@@ -18,9 +39,16 @@ export function clearTokens() {
   refreshToken = null;
   localStorage.removeItem("dangro_access_token");
   localStorage.removeItem("dangro_refresh_token");
+  sessionStorage.removeItem("dangro_access_token");
+  sessionStorage.removeItem("dangro_refresh_token");
+  localStorage.removeItem("dangro_remember");
 }
 
 export function getAccessToken() {
+  if (!accessToken) {
+    accessToken = localStorage.getItem("dangro_access_token") || sessionStorage.getItem("dangro_access_token") || null;
+    refreshToken = localStorage.getItem("dangro_refresh_token") || sessionStorage.getItem("dangro_refresh_token") || null;
+  }
   return accessToken;
 }
 

@@ -2,15 +2,15 @@ import bcrypt from "bcryptjs";
 import { prisma } from "../init.js";
 
 export const UserRepository = {
-  findById(id) {
+  async findById(id) {
     return prisma.user.findUnique({ where: { id } });
   },
 
-  findByUsername(username) {
+  async findByUsername(username) {
     return prisma.user.findUnique({ where: { username } });
   },
 
-  findByEmail(email) {
+  async findByEmail(email) {
     if (!email) return null;
     return prisma.user.findFirst({ where: { email } });
   },
@@ -35,7 +35,7 @@ export const UserRepository = {
     });
   },
 
-  updateProfile(id, fields) {
+  async updateProfile(id, fields) {
     const map = {
       display_name: "displayName",
       custom_status: "customStatus",
@@ -56,7 +56,7 @@ export const UserRepository = {
     return bcrypt.compare(password, user.passwordHash);
   },
 
-  search(query, excludeId) {
+  async search(query, excludeId) {
     return prisma.user.findMany({
       where: {
         AND: [
