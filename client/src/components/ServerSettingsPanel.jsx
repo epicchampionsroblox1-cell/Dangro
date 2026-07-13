@@ -7,7 +7,26 @@ export default function ServerSettingsPanel({ server, onClose }) {
   const [serverName, setServerName] = useState(server?.name || "");
   const [serverIcon, setServerIcon] = useState(server?.icon || "");
   const [activeTab, setActiveTab] = useState("overview");
+  const [memberSearch, setMemberSearch] = useState("");
+  const [members, setMembers] = useState([]);
+  const [bannedUsers, setBannedUsers] = useState([]);
   const isOwner = server?.ownerId === state.user?.id;
+  const isCoOwner = (() => {
+    if (isOwner) return false;
+    try {
+      const co = JSON.parse(server?.coOwnerIds || "[]");
+      return co.includes(state.user?.id);
+    } catch { return false; }
+  })();
+  const canMod = isOwner || isCoOwner;
+
+  useEffect(() => {
+    if (server && canMod) {
+      api.servers.get(server.id).then(srv => {
+        setMembers(srv.members || []);
+      }).catch(() => {});
+    }
+  }, [server?.id]);
 
   useEffect(() => {
     if (server) {
@@ -49,6 +68,47 @@ export default function ServerSettingsPanel({ server, onClose }) {
     }
   }
 
+  function hashColor(str) {
+    const AVATARS = ["#007aff", "#34c759", "#ff3b30", "#ffcc00", "#af52de", "#ff9500", "#5ac8fa", "#ff2d55"];
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
+    return AVATARS[Math.abs(hash) % AVATARS.length];
+  }
+
+  async function handleKick(targetUserId, username) {
+    if (!window.confirm(`Kick @${username} from ${server.name}?`)) return;
+    try {
+      await api.servers.kick(server.id, targetUserId);
+      setMembers(prev => prev.filter(m => m.id !== targetUserId));
+      addToast(`Kicked @${username}`, "info");
+    } catch (e) { addToast(e.message || "Failed to kick member", "error"); }
+  }
+
+  async function handleBan(targetUserId, username) {
+    if (!window.confirm(`Ban @${username} from ${server.name}? They will be kicked and cannot rejoin.`)) return;
+    try {
+      await api.servers.ban(server.id, targetUserId);
+      setMembers(prev => prev.filter(m => m.id !== targetUserId));
+      addToast(`Banned @${username}`, "info");
+    } catch (e) { addToast(e.message || "Failed to ban member", "error"); }
+  }
+
+  async function handleSetCoOwner(targetUserId, username) {
+    if (!window.confirm(`Make @${username} a co-owner?`)) return;
+    try {
+      await api.servers.setCoOwner(server.id, targetUserId);
+      addToast(`@${username} is now a co-owner`, "success");
+    } catch (e) { addToast(e.message || "Failed to set co-owner", "error"); }
+  }
+
+  async function handleRemoveCoOwner(targetUserId, username) {
+    if (!window.confirm(`Remove @${username} as co-owner?`)) return;
+    try {
+      await api.servers.removeCoOwner(server.id, targetUserId);
+      addToast(`@${username} is no longer a co-owner`, "info");
+    } catch (e) { addToast(e.message || "Failed to remove co-owner", "error"); }
+  }
+
   async function handleLeave() {
     if (!window.confirm("Leave " + server.name + "?")) return;
     try {
@@ -79,6 +139,24 @@ export default function ServerSettingsPanel({ server, onClose }) {
               <span className="settings-tab-icon">&#9881;</span>
               <span className="settings-tab-label">Overview</span>
             </button>
+            {canMod && (
+              <button className={"settings-tab" + (activeTab === "members" ? " active" : "")} onClick={() => setActiveTab("members")}>
+                <span className="settings-tab-icon">&#128101;</span>
+                <span className="settings-tab-label">Members</span>
+              </button>
+            )}
+            {isOwner && (
+              <button className={"settings-tab" + (activeTab === "coowners" ? " active" : "")} onClick={() => setActiveTab("coowners")}>
+                <span className="settings-tab-icon">&#128081;</span>
+                <span className="settings-tab-label">Co-Owners</span>
+              </button>
+            )}
+            {canMod && (
+              <button className={"settings-tab" + (activeTab === "bans" ? " active" : "")} onClick={() => setActiveTab("bans")}>
+                <span className="settings-tab-icon">&#128683;</span>
+                <span className="settings-tab-label">Bans</span>
+              </button>
+            )}
             {isOwner && (
               <button className={"settings-tab" + (activeTab === "delete" ? " active" : "")} onClick={() => setActiveTab("delete")} style={{ color: "var(--red)" }}>
                 <span className="settings-tab-icon">&#128465;</span>
@@ -123,6 +201,100 @@ export default function ServerSettingsPanel({ server, onClose }) {
                 {isOwner && (
                   <button className="settings-btn settings-save-btn" onClick={handleSave} style={{ marginTop: 16 }}>Save Changes</button>
                 )}
+              </div>
+            )}
+            {activeTab === "members" && canMod && (
+              <div className="settings-section">
+                <h3>Server Members ({members.length})</h3>
+                <div className="settings-field">
+                  <input className="settings-input" type="text" placeholder="Search members..." value={memberSearch} onChange={e => setMemberSearch(e.target.value)} />
+                </div>
+                <div className="server-member-list">
+                  {members.filter(m => {
+                    if (!memberSearch.trim()) return true;
+                    return m.username?.toLowerCase().includes(memberSearch.toLowerCase());
+                  }).map(m => (
+                    <div key={m.id} className="server-member-item">
+                      <div className="server-member-avatar" style={{ background: hashColor(m.username) }}>
+                        {m.username?.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="server-member-info">
+                        <div className="server-member-name">
+                          {m.username}
+                          {m.id === server?.ownerId && <span className="server-member-badge owner">Owner</span>}
+                          {(() => { try { return JSON.parse(server?.coOwnerIds || "[]").includes(m.id) ? <span className="server-member-badge coowner">Co-Owner</span> : null; } catch { return null; }})()}
+                        </div>
+                      </div>
+                      <div className="server-member-actions">
+                        {m.id !== server?.ownerId && m.id !== state.user?.id && (
+                          <>
+                            <button className="mod-btn danger" onClick={() => handleKick(m.id, m.username)} title="Kick">&#128682;</button>
+                            <button className="mod-btn danger" onClick={() => handleBan(m.id, m.username)} title="Ban">&#128683;</button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {activeTab === "coowners" && isOwner && (
+              <div className="settings-section">
+                <h3>Co-Owner Management</h3>
+                <p style={{ color: "var(--text-muted)", marginBottom: 16, fontSize: 12 }}>
+                  Co-owners can moderate (kick, ban, timeout) but cannot delete the server or manage co-owners.
+                </p>
+                <h4 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Current Co-Owners</h4>
+                <div className="server-member-list">
+                  {members.filter(m => { try { return JSON.parse(server?.coOwnerIds || "[]").includes(m.id); } catch { return false; }}).map(m => (
+                    <div key={m.id} className="server-member-item">
+                      <div className="server-member-avatar" style={{ background: hashColor(m.username) }}>
+                        {m.username?.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="server-member-info">
+                        <div className="server-member-name">{m.username}</div>
+                      </div>
+                      <button className="mod-btn danger" onClick={() => handleRemoveCoOwner(m.id, m.username)} title="Remove Co-Owner">✕</button>
+                    </div>
+                  ))}
+                  {members.filter(m => { try { return JSON.parse(server?.coOwnerIds || "[]").includes(m.id); } catch { return false; }}).length === 0 && (
+                    <div className="empty-state" style={{ padding: 16 }}>
+                      <div className="empty-state-title" style={{ fontSize: 12 }}>No co-owners set</div>
+                    </div>
+                  )}
+                </div>
+                <h4 style={{ fontSize: 14, fontWeight: 600, margin: "16px 0 8px" }}>Add Co-Owner</h4>
+                <div className="server-member-list">
+                  {members.filter(m => {
+                    if (m.id === server?.ownerId) return false;
+                    try { return !JSON.parse(server?.coOwnerIds || "[]").includes(m.id); } catch { return true; }
+                  }).map(m => (
+                    <div key={m.id} className="server-member-item">
+                      <div className="server-member-avatar" style={{ background: hashColor(m.username) }}>
+                        {m.username?.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="server-member-info">
+                        <div className="server-member-name">{m.username}</div>
+                      </div>
+                      <button className="mod-btn primary" onClick={() => handleSetCoOwner(m.id, m.username)} title="Make Co-Owner">&#128081;</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {activeTab === "bans" && canMod && (
+              <div className="settings-section">
+                <h3>Banned Users</h3>
+                <p style={{ color: "var(--text-muted)", marginBottom: 16, fontSize: 12 }}>
+                  Banned users cannot join the server. Unban them to allow re-entry.
+                </p>
+                <div className="server-member-list">
+                  {bannedUsers.length === 0 ? (
+                    <div className="empty-state" style={{ padding: 16 }}>
+                      <div className="empty-state-title" style={{ fontSize: 12 }}>No banned users</div>
+                    </div>
+                  ) : null}
+                </div>
               </div>
             )}
             {activeTab === "delete" && isOwner && (

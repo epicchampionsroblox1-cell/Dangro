@@ -7,7 +7,6 @@ const SETTINGS_TABS = [
   { id: "profile", label: "Profile", icon: "\uD83D\uDC64" },
   { id: "account", label: "Account", icon: "\uD83D\uDD12" },
   { id: "appearance", label: "Appearance", icon: "\uD83C\uDFA8" },
-  { id: "themes", label: "Themes", icon: "\uD83C\uDFA8" },
   { id: "messages", label: "Messages", icon: "\uD83D\uDCAC" },
   { id: "notifications", label: "Notifications", icon: "\uD83D\uDD14" },
   { id: "privacy", label: "Privacy", icon: "\uD83D\uDD75" },
@@ -22,14 +21,16 @@ const COLOR_PRESETS = [
 ];
 
 const THEMES = [
+  { id: "oled", name: "OLED Black", primary: "#000000", secondary: "#0a0a0a", accent: "#bb86fc" },
   { id: "dark", name: "Dark", primary: "#313338", secondary: "#2b2d31", accent: "#5865f2" },
   { id: "light", name: "Light", primary: "#ffffff", secondary: "#f2f3f5", accent: "#5865f2" },
   { id: "midnight", name: "Midnight", primary: "#0d1117", secondary: "#161b22", accent: "#58a6ff" },
-  { id: "oled", name: "OLED Black", primary: "#000000", secondary: "#0a0a0a", accent: "#bb86fc" },
   { id: "forest", name: "Forest", primary: "#1a2e1a", secondary: "#243824", accent: "#4ade80" },
   { id: "sunset", name: "Sunset", primary: "#2d1b1b", secondary: "#3d2525", accent: "#f97316" },
   { id: "ocean", name: "Ocean", primary: "#0c1a2e", secondary: "#142640", accent: "#38bdf8" },
   { id: "coffee", name: "Coffee", primary: "#2c1810", secondary: "#3e2218", accent: "#c4a882" },
+  { id: "neon", name: "Neon", primary: "#0a0a0a", secondary: "#141414", accent: "#00ff88" },
+  { id: "lavender", name: "Lavender", primary: "#1a1525", secondary: "#231d30", accent: "#c084fc" },
 ];
 
 export default function SettingsPanel({ onClose }) {
@@ -43,7 +44,7 @@ export default function SettingsPanel({ onClose }) {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [theme, setTheme] = useState("dark");
+  const [theme, setTheme] = useState("oled");
   const [banner, setBanner] = useState(state.banner || "");
   const [msgColor, setMsgColor] = useState(state.msgColor || "#ffffff");
   const [notifyMessages, setNotifyMessages] = useState(true);
@@ -60,7 +61,7 @@ export default function SettingsPanel({ onClose }) {
   }, [state]);
 
   useEffect(() => {
-    const savedTheme = localStorage.getItem("dangro_theme") || "dark";
+    const savedTheme = localStorage.getItem("dangro_theme") || "oled";
     setTheme(savedTheme);
     applyTheme(savedTheme);
   }, []);
@@ -74,9 +75,16 @@ export default function SettingsPanel({ onClose }) {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
-      const result = await api.upload.file(file);
+      const result = await api.upload.file(file, (progress) => {
+        dispatch({ type: "SET_UPLOAD_PROGRESS", payload: progress });
+      });
       setBanner(result.url);
-    } catch { addToast("Upload failed", "error"); }
+      addToast("Banner uploaded!", "success");
+    } catch {
+      addToast("Upload failed", "error");
+    } finally {
+      dispatch({ type: "SET_UPLOAD_PROGRESS", payload: null });
+    }
   }
 
   function applyTheme(themeId) {
@@ -99,9 +107,16 @@ export default function SettingsPanel({ onClose }) {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
-      const result = await api.upload.file(file);
+      const result = await api.upload.file(file, (progress) => {
+        dispatch({ type: "SET_UPLOAD_PROGRESS", payload: progress });
+      });
       setProfilePic(result.url);
-    } catch { addToast("Upload failed", "error"); }
+      addToast("Profile photo uploaded!", "success");
+    } catch {
+      addToast("Upload failed", "error");
+    } finally {
+      dispatch({ type: "SET_UPLOAD_PROGRESS", payload: null });
+    }
   }
 
   async function saveProfile() {
@@ -197,13 +212,19 @@ export default function SettingsPanel({ onClose }) {
                 <h3>Profile</h3>
                 <div className="settings-profile-pic">
                   <div className="settings-avatar" style={{
-                    backgroundImage: profilePic ? `url(${profilePic})` : undefined,
-                    backgroundSize: profilePic ? "cover" : undefined,
+                    backgroundColor: profilePic ? "transparent" : undefined,
                   }}>
-                    {!profilePic && (state.displayName.charAt(0).toUpperCase() || "U")}
+                    {profilePic ? (
+                      <img src={profilePic} alt="Profile" style={{ width: "100%", height: "100%", borderRadius: "50%", objectFit: "cover" }} />
+                    ) : (
+                      state.displayName.charAt(0).toUpperCase() || "U"
+                    )}
                   </div>
                   <button className="settings-btn" onClick={() => fileInputRef.current?.click()}>Upload Photo</button>
                   <input type="file" ref={fileInputRef} accept="image/*" className="hidden" onChange={handleFileUpload} />
+                  {profilePic && (
+                    <button className="settings-btn" onClick={() => { setProfilePic(""); addToast("Profile photo removed", "info"); }} style={{ color: "var(--red)" }}>Remove</button>
+                  )}
                 </div>
                 <div className="settings-field">
                   <label>Display Name</label>
@@ -264,8 +285,8 @@ export default function SettingsPanel({ onClose }) {
 
             {tab === "appearance" && (
               <div className="settings-section">
-                <h3>Chat Appearance</h3>
-                <div className="settings-theme-options" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                <h3>Appearance</h3>
+                <div className="settings-theme-options" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 20 }}>
                   {THEMES.map(t => (
                     <button
                       key={t.id}
@@ -282,15 +303,7 @@ export default function SettingsPanel({ onClose }) {
                     </button>
                   ))}
                 </div>
-              </div>
-            )}
-
-            {tab === "themes" && (
-              <div className="settings-section">
-                <h3>Color Themes</h3>
-                <p style={{ color: "var(--text-muted)", fontSize: 12, marginBottom: 12 }}>
-                  Choose from preset themes or customize your own colors.
-                </p>
+                <h3>Color Customization</h3>
                 <div className="settings-field">
                   <label>Accent Color</label>
                   <input type="color" className="settings-color-input" value={theme === "dark" ? "#5865f2" : theme === "light" ? "#5865f2" : "#58a6ff"}

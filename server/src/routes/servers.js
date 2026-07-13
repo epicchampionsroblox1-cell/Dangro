@@ -2,7 +2,18 @@ import { Router } from "express";
 import crypto from "crypto";
 import { prisma } from "../database/init.js";
 
+const BANNED_PREFIX = "banned_";
+
 export const serversRouter = Router();
+
+function canModerate(server, userId) {
+  if (server.ownerId === userId) return true;
+  try {
+    const coOwners = JSON.parse(server.coOwnerIds || "[]");
+    if (coOwners.includes(userId)) return true;
+  } catch {}
+  return false;
+}
 
 serversRouter.get("/", async (req, res) => {
   try {
@@ -164,6 +175,112 @@ serversRouter.post("/:id/leave", async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     console.error("Leave server error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// --- Moderation routes (owner/co-owner only) ---
+
+serversRouter.post("/:id/kick", async (req, res) => {
+  try {
+    const { targetUserId } = req.body;
+    if (!targetUserId) return res.status(400).json({ error: "targetUserId required" });
+    const server = await prisma.server.findUnique({ where: { id: req.params.id } });
+    if (!server) return res.status(404).json({ error: "Server not found" });
+    if (!canModerate(server, req.userId)) return res.status(403).json({ error: "Not authorized" });
+    if (targetUserId === server.ownerId) return res.status(400).json({ error: "Cannot kick the server owner" });
+
+    await prisma.serverMember.delete({
+      where: { serverId_userId: { serverId: req.params.id, userId: targetUserId } },
+    });
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Kick member error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+serversRouter.post("/:id/ban", async (req, res) => {
+  try {
+    const { targetUserId } = req.body;
+    if (!targetUserId) return res.status(400).json({ error: "targetUserId required" });
+    const server = await prisma.server.findUnique({ where: { id: req.params.id } });
+    if (!server) return res.status(404).json({ error: "Server not found" });
+    if (!canModerate(server, req.userId)) return res.status(403).json({ error: "Not authorized" });
+    if (targetUserId === server.ownerId) return res.status(400).json({ error: "Cannot ban the server owner" });
+
+    try {
+      await prisma.serverMember.delete({
+        where: { serverId_userId: { serverId: req.params.id, userId: targetUserId } },
+      });
+    } catch {}
+
+    const bans = JSON.parse(server.bannedIds || "[]");
+    if (!bans.includes(targetUserId)) {
+      bans.push(targetUserId);
+      await prisma.server.update({ where: { id: req.params.id }, data: { bannedIds: JSON.stringify(bans) } });
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Ban member error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+serversRouter.post("/:id/unban", async (req, res) => {
+  try {
+    const { targetUserId } = req.body;
+    if (!targetUserId) return res.status(400).json({ error: "targetUserId required" });
+    const server = await prisma.server.findUnique({ where: { id: req.params.id } });
+    if (!server) return res.status(404).json({ error: "Server not found" });
+    if (!canModerate(server, req.userId)) return res.status(403).json({ error: "Not authorized" });
+
+    const bans = JSON.parse(server.bannedIds || "[]");
+    const filtered = bans.filter(id => id !== targetUserId);
+    if (filtered.length < bans.length) {
+      await prisma.server.update({ where: { id: req.params.id }, data: { bannedIds: JSON.stringify(filtered) } });
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Unban error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+serversRouter.post("/:id/set-coowner", async (req, res) => {
+  try {
+    const { targetUserId } = req.body;
+    if (!targetUserId) return res.status(400).json({ error: "targetUserId required" });
+    const server = await prisma.server.findUnique({ where: { id: req.params.id } });
+    if (!server) return res.status(404).json({ error: "Server not found" });
+    if (server.ownerId !== req.userId) return res.status(403).json({ error: "Only the owner can set co-owners" });
+
+    const coOwners = JSON.parse(server.coOwnerIds || "[]");
+    if (!coOwners.includes(targetUserId)) {
+      coOwners.push(targetUserId);
+      await prisma.server.update({ where: { id: req.params.id }, data: { coOwnerIds: JSON.stringify(coOwners) } });
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Set co-owner error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+serversRouter.post("/:id/remove-coowner", async (req, res) => {
+  try {
+    const { targetUserId } = req.body;
+    if (!targetUserId) return res.status(400).json({ error: "targetUserId required" });
+    const server = await prisma.server.findUnique({ where: { id: req.params.id } });
+    if (!server) return res.status(404).json({ error: "Server not found" });
+    if (server.ownerId !== req.userId) return res.status(403).json({ error: "Only the owner can remove co-owners" });
+
+    const coOwners = JSON.parse(server.coOwnerIds || "[]");
+    const filtered = coOwners.filter(id => id !== targetUserId);
+    await prisma.server.update({ where: { id: req.params.id }, data: { coOwnerIds: JSON.stringify(filtered) } });
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Remove co-owner error:", err);
     res.status(500).json({ error: "Internal server error" });
   }
 });

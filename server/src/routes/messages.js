@@ -3,6 +3,48 @@ import { prisma } from "../database/init.js";
 
 export const messagesRouter = Router();
 
+async function checkChatAccess(userId, chatKey) {
+  if (!chatKey) return false;
+
+  if (chatKey.startsWith("dm_")) {
+    const friendId = chatKey.slice(3);
+    if (friendId === userId) return true;
+    const friendship = await prisma.friendship.findFirst({
+      where: {
+        OR: [
+          { userId, friendId, status: "accepted" },
+          { userId: friendId, friendId: userId, status: "accepted" },
+        ],
+      },
+    });
+    return !!friendship;
+  }
+
+  if (chatKey.startsWith("group_")) {
+    const groupId = chatKey.slice(6);
+    const member = await prisma.groupMember.findUnique({
+      where: { groupId_username: { groupId, username: "" } },
+    }).catch(() => null);
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { username: true } });
+    if (!user) return false;
+    const groupMember = await prisma.groupMember.findUnique({
+      where: { groupId_username: { groupId, username: user.username } },
+    }).catch(() => null);
+    return !!groupMember;
+  }
+
+  const underscoreIdx = chatKey.indexOf("_");
+  if (underscoreIdx > 0) {
+    const serverId = chatKey.slice(0, underscoreIdx);
+    const membership = await prisma.serverMember.findUnique({
+      where: { serverId_userId: { serverId, userId } },
+    });
+    return !!membership;
+  }
+
+  return false;
+}
+
 async function getReactions(messageId) {
   const rows = await prisma.reaction.findMany({
     where: { messageId },
@@ -38,6 +80,11 @@ messagesRouter.get("/:chatKey", async (req, res) => {
     const { limit, before, after } = req.query;
     const pageSize = Math.min(parseInt(limit) || 50, 100);
     const chatKey = req.params.chatKey;
+
+    const hasAccess = await checkChatAccess(req.userId, chatKey);
+    if (!hasAccess) {
+      return res.status(403).json({ error: "You do not have access to this chat" });
+    }
 
     const where = { chatKey };
     const orderDir = "desc";
@@ -94,6 +141,11 @@ messagesRouter.post("/", async (req, res) => {
       return res.status(400).json({ error: "chatKey, sender, and content required" });
     }
 
+    const hasAccess = await checkChatAccess(req.userId, chatKey);
+    if (!hasAccess) {
+      return res.status(403).json({ error: "You do not have access to this chat" });
+    }
+
     const id = "msg_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
 
     const msg = await prisma.message.create({
@@ -127,6 +179,10 @@ messagesRouter.patch("/:id", async (req, res) => {
     const existing = await prisma.message.findUnique({ where: { id: req.params.id } });
     if (!existing) return res.status(404).json({ error: "Message not found" });
 
+    if (existing.senderId !== req.userId) {
+      return res.status(403).json({ error: "You can only edit your own messages" });
+    }
+
     const msg = await prisma.message.update({
       where: { id: req.params.id },
       data: { content, editedAt: new Date() },
@@ -144,6 +200,10 @@ messagesRouter.delete("/:id", async (req, res) => {
   try {
     const existing = await prisma.message.findUnique({ where: { id: req.params.id } });
     if (!existing) return res.status(404).json({ error: "Message not found" });
+
+    if (existing.senderId !== req.userId) {
+      return res.status(403).json({ error: "You can only delete your own messages" });
+    }
 
     await prisma.message.delete({ where: { id: req.params.id } });
     res.json({ success: true, messageId: req.params.id });

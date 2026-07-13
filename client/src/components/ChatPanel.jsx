@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useApp, getActiveChatKey } from "../contexts/AppContext";
 import socket from "../services/socket";
 import { api } from "../services/api";
@@ -7,7 +7,7 @@ import EmojiPicker from "./EmojiPicker";
 
 const ACCEPTED_TYPES = "image/*,video/mp4,video/webm,application/pdf,.txt,.zip,.rar";
 
-export default function ChatPanel({ onStartCall, mobileChat, onMobileBack, onSettings }) {
+const ChatPanel = React.memo(function ChatPanel({ onStartCall, mobileChat, onMobileBack, onSettings }) {
   const { state, dispatch, loadMessages, sendMessage, addToast } = useApp();
   const [input, setInput] = useState("");
   const [replyTarget, setReplyTarget] = useState(null);
@@ -24,9 +24,9 @@ export default function ChatPanel({ onStartCall, mobileChat, onMobileBack, onSet
   const chatKey = getActiveChatKey(state);
   const messages = state.messages[chatKey] || [];
   const query = state.chatSearchQuery.trim().toLowerCase();
-  const filtered = query
+  const filtered = useMemo(() => query
     ? messages.filter(m => m.content?.toLowerCase().includes(query) || m.sender?.toLowerCase().includes(query))
-    : messages;
+    : messages, [messages, query]);
 
   const hasMore = state.messageCursors[chatKey]?.hasMore;
   const typingData = state.typingUsers[chatKey];
@@ -300,4 +300,6 @@ export default function ChatPanel({ onStartCall, mobileChat, onMobileBack, onSet
       )}
     </div>
   );
-}
+});
+
+export default ChatPanel;

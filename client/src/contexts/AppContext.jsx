@@ -141,9 +141,9 @@ export function AppProvider({ children }) {
   }, [state]);
 
   useEffect(() => {
-    const savedTheme = localStorage.getItem("dangro_theme") || "dark";
+    const savedTheme = localStorage.getItem("dangro_theme") || "oled";
     const savedMsgColor = localStorage.getItem("dangro_msg_color") || "#ffffff";
-    if (savedTheme !== "dark") {
+    if (savedTheme !== "oled") {
       document.documentElement.setAttribute("data-theme", savedTheme);
     }
     dispatch({ type: "SET_PROFILE", payload: { msgColor: savedMsgColor } });
@@ -316,6 +316,14 @@ export function AppProvider({ children }) {
     dispatch({ type: "ADD_MESSAGE", chatKey, payload: optimisticMsg });
     socket.emit("message:send", { chatKey, sender: s.displayName, content, isImage, replyTo, attachments });
   }, []);
+
+  // Mark chat as read when active chat changes
+  useEffect(() => {
+    const key = getActiveChatKey(stateRef.current);
+    if (key) {
+      dispatch({ type: "SET_LAST_READ", chatKey: key, payload: new Date().toISOString() });
+    }
+  }, [state.activeChatType, state.activeDmFriendId, state.activeChannelId, state.activeServerId]);
 
   const addToast = useCallback((message, type = "info") => {
     const id = Date.now();
