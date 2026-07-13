@@ -8,10 +8,9 @@ channelsRouter.post("/", async (req, res) => {
     const { serverId, name, type, category } = req.body;
     if (!serverId || !name) return res.status(400).json({ error: "serverId and name required" });
 
-    const member = await prisma.serverMember.findUnique({
-      where: { serverId_userId: { serverId, userId: req.userId } },
-    });
-    if (!member) return res.status(403).json({ error: "Not a member of this server" });
+    const server = await prisma.server.findUnique({ where: { id: serverId } });
+    if (!server) return res.status(404).json({ error: "Server not found" });
+    if (server.ownerId !== req.userId) return res.status(403).json({ error: "Only the server owner can create channels" });
 
     const id = name.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-_]/g, "");
     const existing = await prisma.channel.findUnique({

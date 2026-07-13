@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { useApp } from "../contexts/AppContext";
 import { api } from "../services/api";
 
@@ -14,6 +14,9 @@ function hashColor(str) {
 
 export default function FriendActivity() {
   const { state, dispatch, addToast } = useApp();
+  const [showAddFriend, setShowAddFriend] = useState(false);
+  const [addUsername, setAddUsername] = useState("");
+  const [addLoading, setAddLoading] = useState(false);
 
   const friends = state.friends.filter(
     f => f.status !== "pending_in" && f.status !== "pending_out"
@@ -72,11 +75,29 @@ export default function FriendActivity() {
     } catch { addToast("Failed to cancel request", "error"); }
   }
 
+  async function handleAddFriend() {
+    const u = addUsername.trim();
+    if (!u) return;
+    setAddLoading(true);
+    try {
+      const result = await api.friends.add(u);
+      dispatch({ type: "SET_FRIENDS", payload: [...state.friends, result] });
+      addToast(`Friend request sent to @${u}`, "success");
+      setShowAddFriend(false);
+      setAddUsername("");
+    } catch (e) {
+      addToast(e.message || "Failed to add friend", "error");
+    } finally {
+      setAddLoading(false);
+    }
+  }
+
   return (
     <div className="friend-activity">
       <div className="fa-header">
         <span>Friends</span>
         <span className="fa-count">{friends.length} online</span>
+        <button className="fa-add-btn" onClick={() => setShowAddFriend(true)} title="Add Friend">+</button>
       </div>
 
       {pendingIn.length > 0 && (
@@ -166,6 +187,28 @@ export default function FriendActivity() {
           })
         )}
       </div>
+
+      {showAddFriend && (
+        <div className="modal-overlay" onClick={() => setShowAddFriend(false)}>
+          <div className="modal-card" onClick={e => e.stopPropagation()}>
+            <h3>Add Friend</h3>
+            <p>Enter the exact username of the person you want to add.</p>
+            <div className="settings-field">
+              <label>Username</label>
+              <input className="settings-input" type="text" placeholder="Enter username..." value={addUsername}
+                onChange={e => setAddUsername(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && !addLoading) handleAddFriend(); }}
+                autoFocus />
+            </div>
+            <div className="modal-actions">
+              <button className="modal-btn cancel" onClick={() => setShowAddFriend(false)}>Cancel</button>
+              <button className="modal-btn submit" onClick={handleAddFriend} disabled={addLoading || !addUsername.trim()}>
+                {addLoading ? "Sending..." : "Send Request"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

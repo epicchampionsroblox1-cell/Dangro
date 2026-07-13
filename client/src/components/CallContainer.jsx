@@ -15,6 +15,7 @@ export default function CallContainer({ onClose, channelName, incomingFrom, call
   const [screenSharing, setScreenSharing] = useState(false);
   const [chatInput, setChatInput] = useState("");
   const [showChat, setShowChat] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
   const [volume, setVolume] = useState(100);
   const [micVolume, setMicVolume] = useState(100);
   const localVideoRef = useRef(null);
@@ -335,7 +336,7 @@ export default function CallContainer({ onClose, channelName, incomingFrom, call
 
 
   return (
-    <div className="call-container">
+    <div className={"call-container" + (fullscreen ? " call-fullscreen" : "")}>
       <div className="call-header">
         <div className="call-header-left">
           <span className="call-status-dot active" />
@@ -451,6 +452,9 @@ export default function CallContainer({ onClose, channelName, incomingFrom, call
           </button>
           <button className={"call-control-btn" + (showChat ? " active" : "")} title={showChat ? "Hide Chat" : "Show Chat"} onClick={() => setShowChat(!showChat)}>
             💬
+          </button>
+          <button className={"call-control-btn" + (fullscreen ? " active" : "")} title={fullscreen ? "Exit Fullscreen" : "Fullscreen"} onClick={() => setFullscreen(!fullscreen)}>
+            {fullscreen ? "⤓" : "⤢"}
           </button>
         </div>
         <div className="call-controls-right">

@@ -29,11 +29,33 @@ export function registerChatHandlers(io, socket) {
 
     const id = "msg_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
 
+    // Resolve DM chatKey to the canonical form (userId-based)
+    let resolvedChatKey = chatKey;
+    if (chatKey.startsWith("dm_")) {
+      const targetId = chatKey.slice(3);
+      // Check if it's a friendship ID, resolve to user-based key
+      try {
+        const friendship = await prisma.friendship.findUnique({
+          where: { id: targetId },
+          select: { userId: true, friendId: true },
+        });
+        if (friendship) {
+          const otherUserId = friendship.userId === userId ? friendship.friendId : friendship.userId;
+          resolvedChatKey = "dm_" + otherUserId;
+        } else {
+          // already user-based
+          resolvedChatKey = chatKey;
+        }
+      } catch {
+        resolvedChatKey = chatKey;
+      }
+    }
+
     try {
       await prisma.message.create({
         data: {
           id,
-          chatKey,
+          chatKey: resolvedChatKey,
           sender,
           senderId: userId,
           content,
@@ -50,7 +72,7 @@ export function registerChatHandlers(io, socket) {
 
     const msgPayload = {
       id,
-      chatKey,
+      chatKey: resolvedChatKey,
       sender,
       senderId: userId,
       content,
@@ -63,7 +85,7 @@ export function registerChatHandlers(io, socket) {
       editedAt: null,
     };
 
-    socket.to(chatKey).emit("message:new", msgPayload);
+    socket.to(resolvedChatKey).emit("message:new", msgPayload);
     socket.emit("message:sent", msgPayload);
   });
 
@@ -264,18 +286,16 @@ export function registerChatHandlers(io, socket) {
     io.emit("profile:updated", { userId, username, ...data });
   });
 
-  // Voice channel join/leave
+  // Voice channel join/leave (silent - no notifications to other users)
   socket.on("voice:join", ({ channelId, serverId }) => {
     const room = "voice_" + serverId + "_" + channelId;
     socket.join(room);
-    socket.to(room).emit("voice:user-joined", { userId, username });
     socket.data.voiceRoom = room;
   });
 
   socket.on("voice:leave", ({ channelId, serverId }) => {
     const room = "voice_" + serverId + "_" + channelId;
     socket.leave(room);
-    socket.to(room).emit("voice:user-left", { userId, username });
     socket.data.voiceRoom = null;
   });
 
@@ -286,7 +306,7 @@ export function registerChatHandlers(io, socket) {
 
   socket.on("disconnect", () => {
     if (socket.data.voiceRoom) {
-      io.to(socket.data.voiceRoom).emit("voice:user-left", { userId, username });
+      socket.leave(socket.data.voiceRoom);
     }
     const sockets = userSockets.get(userId);
     if (sockets) {
