@@ -11,3 +11,6 @@ data/
 Thumbs.db
 uploads/
 server/uploads/
+server/public/assets/
+server/public/index.html
+server/public/404.html
