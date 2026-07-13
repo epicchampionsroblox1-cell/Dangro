@@ -140,31 +140,37 @@ export function AppProvider({ children }) {
     }
   }, [state]);
 
+  const [authLoading, setAuthLoading] = useState(true);
+
   useEffect(() => {
-    const savedTheme = localStorage.getItem("dangro_theme") || "oled";
+    const savedTheme = localStorage.getItem("dangro_theme") || "dark";
     const savedMsgColor = localStorage.getItem("dangro_msg_color") || "#ffffff";
-    if (savedTheme !== "oled") {
+    if (savedTheme !== "dark") {
       document.documentElement.setAttribute("data-theme", savedTheme);
     }
     dispatch({ type: "SET_PROFILE", payload: { msgColor: savedMsgColor } });
 
     const token = getAccessToken();
-    if (token && !state.user) {
-      api.auth.me().then(data => {
-        const u = data.user;
-        dispatch({ type: "SET_USER", payload: { id: u.id, username: u.username, email: u.email } });
-        dispatch({ type: "SET_PROFILE", payload: {
-          displayName: u.displayName || u.username,
-          bio: u.bio || "",
-          banner: u.banner || "",
-          status: u.status || "online",
-          customStatus: u.customStatus || "",
-          profilePic: u.profilePic || "",
-        }});
-      }).catch(() => {
-        clearTokens();
-      });
+    if (!token) {
+      setAuthLoading(false);
+      return;
     }
+    api.auth.me().then(data => {
+      const u = data.user;
+      dispatch({ type: "SET_USER", payload: { id: u.id, username: u.username, email: u.email } });
+      dispatch({ type: "SET_PROFILE", payload: {
+        displayName: u.displayName || u.username,
+        bio: u.bio || "",
+        banner: u.banner || "",
+        status: u.status || "online",
+        customStatus: u.customStatus || "",
+        profilePic: u.profilePic || "",
+      }});
+    }).catch(() => {
+      clearTokens();
+    }).finally(() => {
+      setAuthLoading(false);
+    });
   }, []);
 
   useEffect(() => {
@@ -325,6 +331,24 @@ export function AppProvider({ children }) {
     }
   }, [state.activeChatType, state.activeDmFriendId, state.activeChannelId, state.activeServerId]);
 
+  // Dynamic page title
+  useEffect(() => {
+    const s = stateRef.current;
+    let title = "Dangro";
+    if (s.activeChatType === "dm") {
+      const friend = s.friends.find(f => f.id === s.activeDmFriendId);
+      if (friend) title = "Dangro | @" + friend.username;
+    } else if (s.activeChatType === "channel") {
+      const server = s.servers.find(srv => srv.id === s.activeServerId);
+      const channel = server?.channels?.find(c => c.id === s.activeChannelId);
+      if (channel && server) title = "Dangro | #" + channel.name + " in " + server.name;
+    } else if (s.activeChatType === "group") {
+      const group = s.groupChats.find(g => g.id === s.activeGroupChatId);
+      if (group) title = "Dangro | " + group.name;
+    }
+    document.title = title;
+  }, [state.activeChatType, state.activeDmFriendId, state.activeChannelId, state.activeServerId, state.friends, state.servers, state.groupChats]);
+
   const addToast = useCallback((message, type = "info") => {
     const id = Date.now();
     dispatch({ type: "ADD_TOAST", payload: { id, message, type } });
@@ -332,7 +356,7 @@ export function AppProvider({ children }) {
   }, []);
 
   return (
-    <AppContext.Provider value={{ state, dispatch, login, signup, logout, loadMessages, sendMessage, addToast }}>
+    <AppContext.Provider value={{ state, dispatch, login, signup, logout, loadMessages, sendMessage, addToast, authLoading }}>
       {children}
     </AppContext.Provider>
   );
@@ -347,8 +371,11 @@ export function useApp() {
 export function getActiveChatKey(s) {
   if (s.activeChatType === "channel" && s.activeServerId && s.activeChannelId)
     return s.activeServerId + "_" + s.activeChannelId;
-  if (s.activeChatType === "dm" && s.activeDmFriendId)
+  if (s.activeChatType === "dm" && s.activeDmFriendId) {
+    const friend = s.friends.find(f => f.id === s.activeDmFriendId);
+    if (friend && friend.userId) return "dm_" + friend.userId;
     return "dm_" + s.activeDmFriendId;
+  }
   if (s.activeChatType === "group" && s.activeGroupChatId)
     return "group_" + s.activeGroupChatId;
   return null;

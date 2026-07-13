@@ -171,6 +171,7 @@ export const api = {
   servers: {
     list: () => request("/servers"),
     get: (id) => request(`/servers/${id}`),
+    browse: (q) => request(`/servers/browse${q ? "?q=" + encodeURIComponent(q) : ""}`),
     create: (name, icon) => request("/servers", { method: "POST", body: JSON.stringify({ name, icon }) }),
     update: (id, data) => request(`/servers/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
     remove: (id) => request(`/servers/${id}`, { method: "DELETE" }),

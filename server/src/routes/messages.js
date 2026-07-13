@@ -7,13 +7,14 @@ async function checkChatAccess(userId, chatKey) {
   if (!chatKey) return false;
 
   if (chatKey.startsWith("dm_")) {
-    const friendId = chatKey.slice(3);
-    if (friendId === userId) return true;
+    const targetId = chatKey.slice(3);
+    if (targetId === userId) return true;
     const friendship = await prisma.friendship.findFirst({
       where: {
         OR: [
-          { userId, friendId, status: "accepted" },
-          { userId: friendId, friendId: userId, status: "accepted" },
+          { userId, friendId: targetId, status: "accepted" },
+          { userId: targetId, friendId: userId, status: "accepted" },
+          { id: targetId, OR: [{ userId }, { friendId: userId }] },
         ],
       },
     });

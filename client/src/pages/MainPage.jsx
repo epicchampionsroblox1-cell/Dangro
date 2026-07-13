@@ -7,6 +7,7 @@ import GamingHub from "../components/GamingHub";
 import ChatPanel from "../components/ChatPanel";
 import ToastContainer from "../components/ToastContainer";
 import Clock from "../components/Clock";
+import ServerBrowser from "../components/ServerBrowser";
 
 const SettingsPanel = lazy(() => import("../components/SettingsPanel"));
 const ServerSettingsPanel = lazy(() => import("../components/ServerSettingsPanel"));
@@ -51,6 +52,7 @@ export default function MainPage() {
   const [channelType, setChannelType] = React.useState("text");
   const [inviteCode, setInviteCode] = React.useState("");
   const [showStatusMenu, setShowStatusMenu] = React.useState(false);
+  const [showServerBrowser, setShowServerBrowser] = React.useState(false);
 
   const currentServer = state.servers.find(s => s.id === state.activeServerId);
 
@@ -219,7 +221,7 @@ export default function MainPage() {
             </div>
           ))}
           <div className="top-bar-server add-server" onClick={() => setShowServerModal(true)} title="Create Server">+</div>
-          <div className="top-bar-server join-server" onClick={() => setShowJoinModal(true)} title="Join Server">&#128279;</div>
+          <div className="top-bar-server join-server" onClick={() => setShowServerBrowser(true)} title="Browse Servers">&#128279;</div>
         </div>
 
         {/* LEFT PANEL - Activity / Friends / DMs / Servers */}
@@ -467,6 +469,7 @@ export default function MainPage() {
       {/* MODALS */}
       <ToastContainer />
       {settingsOpen && <Suspense fallback={null}><SettingsPanel onClose={() => setSettingsOpen(false)} /></Suspense>}
+      {showServerBrowser && <Suspense fallback={null}><ServerBrowser onClose={() => setShowServerBrowser(false)} /></Suspense>}
       {serverSettings && <Suspense fallback={null}><ServerSettingsPanel server={serverSettings} onClose={() => setServerSettings(null)} /></Suspense>}
       {voiceSettingsOpen && <Suspense fallback={null}><VoiceSettingsPanel onClose={() => setVoiceSettingsOpen(false)} /></Suspense>}
       {callOpen && (

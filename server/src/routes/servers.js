@@ -2,8 +2,6 @@ import { Router } from "express";
 import crypto from "crypto";
 import { prisma } from "../database/init.js";
 
-const BANNED_PREFIX = "banned_";
-
 export const serversRouter = Router();
 
 function canModerate(server, userId) {
@@ -75,6 +73,31 @@ serversRouter.post("/", async (req, res) => {
   }
 });
 
+// Public server listing for server browser
+const PUBLIC_SERVERS = [
+  { id: "gaming-hub", name: "Gaming Hub", icon: "🎮", memberCount: 234, description: "The ultimate gaming community - discuss, play, and compete!" },
+  { id: "music-lovers", name: "Music Lovers", icon: "🎵", memberCount: 156, description: "Share your favorite tunes, discover new artists, and jam together." },
+  { id: "dev-corner", name: "Dev Corner", icon: "💻", memberCount: 189, description: "A place for developers to share code, ask questions, and collaborate." },
+  { id: "art-studio", name: "Art Studio", icon: "🎨", memberCount: 98, description: "Showcase your artwork, get feedback, and find inspiration." },
+  { id: "movie-night", name: "Movie Night", icon: "🎬", memberCount: 145, description: "Weekly movie screenings, discussions, and film recommendations." },
+  { id: "book-club", name: "Book Club", icon: "📚", memberCount: 67, description: "Read together, discuss chapters, and share your favorite books." },
+];
+
+serversRouter.get("/browse", async (req, res) => {
+  try {
+    const { q } = req.query;
+    let results = [...PUBLIC_SERVERS];
+    if (q && q.trim()) {
+      const query = q.toLowerCase().trim();
+      results = results.filter(s => s.name.toLowerCase().includes(query) || s.description.toLowerCase().includes(query));
+    }
+    res.json(results);
+  } catch (err) {
+    console.error("Browse servers error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 serversRouter.get("/:id", async (req, res) => {
   try {
     const server = await prisma.server.findUnique({
@@ -140,6 +163,9 @@ serversRouter.post("/join/:code", async (req, res) => {
   try {
     const server = await prisma.server.findUnique({ where: { inviteCode: req.params.code } });
     if (!server) return res.status(404).json({ error: "Invalid invite code" });
+
+    const bans = JSON.parse(server.bannedIds || "[]");
+    if (bans.includes(req.userId)) return res.status(403).json({ error: "You are banned from this server" });
 
     const existing = await prisma.serverMember.findUnique({
       where: { serverId_userId: { serverId: server.id, userId: req.userId } },
